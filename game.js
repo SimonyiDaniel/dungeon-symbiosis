@@ -85,6 +85,7 @@ class GameState {
                 biomassRate: 0.1,
                 cost: { biomass: 30, mana: 15 },
                 evolvesFrom: 'poison_slime',
+                evolvesTo: ['toxic_overlord'], // Can evolve to fusion slime
                 habitat: 'swamps',
                 special: 'poison_aura' // Damages all heroes over time
             },
@@ -96,6 +97,7 @@ class GameState {
                 biomassRate: 0.6, // Produces extra biomass by spawning mini-slimes
                 cost: { biomass: 35, mana: 20 },
                 evolvesFrom: 'poison_slime',
+                evolvesTo: ['toxic_overlord'], // Can evolve to fusion slime
                 habitat: 'nursery',
                 special: 'spawn_minions' // Occasionally spawns free basic slimes
             },
@@ -106,6 +108,7 @@ class GameState {
                 nutrientRate: 0.2,
                 cost: { biomass: 40, nutrients: 15 },
                 evolvesFrom: 'crystal_slime',
+                evolvesTo: ['crystal_sovereign'], // Can evolve to fusion slime
                 habitat: 'crystalCaves',
                 special: 'crystal_armor' // Reduces incoming damage
             },
@@ -117,6 +120,7 @@ class GameState {
                 manaRate: 0.1,
                 cost: { biomass: 45, nutrients: 20 },
                 evolvesFrom: 'crystal_slime',
+                evolvesTo: ['crystal_sovereign'], // Can evolve to fusion slime
                 habitat: 'crystalCaves',
                 special: 'resource_conversion' // Converts biomass to mana/nutrients
             },
@@ -127,6 +131,7 @@ class GameState {
                 biomassRate: 0.3,
                 cost: { biomass: 35, mana: 10, nutrients: 5 },
                 evolvesFrom: 'warrior_slime',
+                evolvesTo: ['apex_warrior'], // Can evolve to fusion slime
                 habitat: 'barracks',
                 special: 'leadership' // Boosts nearby monsters
             },
@@ -137,8 +142,42 @@ class GameState {
                 biomassRate: 0.1,
                 cost: { biomass: 30, mana: 15 },
                 evolvesFrom: 'warrior_slime',
+                evolvesTo: ['apex_warrior'], // Can evolve to fusion slime
                 habitat: 'battlegrounds',
                 special: 'rage' // Attack increases when damaged
+            },
+            // Fusion Slimes - Require both end-tier slimes
+            toxic_overlord: {
+                name: 'Toxic Overlord',
+                health: 150,
+                attack: 25,
+                manaRate: 0.6,
+                biomassRate: 0.4,
+                cost: { biomass: 80, mana: 50, nutrients: 20 },
+                fusionRequirements: ['toxic_horror', 'venomous_broodmother'],
+                habitat: 'swamps',
+                special: 'toxic_mastery' // Enhanced poison aura + spawns toxic minions
+            },
+            crystal_sovereign: {
+                name: 'Crystal Sovereign',
+                health: 180,
+                attack: 20,
+                nutrientRate: 0.5,
+                manaRate: 0.3,
+                cost: { biomass: 100, mana: 40, nutrients: 30 },
+                fusionRequirements: ['gem_guardian', 'crystal_hive'],
+                habitat: 'crystalCaves',
+                special: 'crystal_mastery' // Enhanced armor + mass resource conversion
+            },
+            apex_warrior: {
+                name: 'Apex Warrior',
+                health: 200,
+                attack: 40,
+                biomassRate: 0.5,
+                cost: { biomass: 120, mana: 60, nutrients: 25 },
+                fusionRequirements: ['slime_champion', 'berserker_slime'],
+                habitat: 'battlegrounds',
+                special: 'apex_mastery' // Leadership + rage + pack hunting combined
             }
         };
         
@@ -360,6 +399,31 @@ class DungeonSymbiosis {
                 // Attack bonus based on missing health
                 const healthPercent = monster.health / monster.maxHealth;
                 monster.rageBonus = 1 + (1 - healthPercent); // Up to 2x attack when near death
+                break;
+                
+            case 'toxic_mastery':
+                // Enhanced poison aura + spawns toxic minions
+                if (monster.specialTimer >= 90) { // Every 90 seconds
+                    monster.specialTimer = 0;
+                    this.spawnMinion('poison_slime');
+                    this.logMessage(`${monster.name} spawned a Poison Slime minion!`);
+                }
+                break;
+                
+            case 'crystal_mastery':
+                // Enhanced armor + mass resource conversion
+                if (monster.specialTimer >= 20 && this.state.resources.biomass >= 10) { // Every 20 seconds
+                    monster.specialTimer = 0;
+                    this.state.resources.biomass -= 10;
+                    this.state.resources.mana += 5;
+                    this.state.resources.nutrients += 3;
+                }
+                break;
+                
+            case 'apex_mastery':
+                // Leadership + rage + pack hunting combined - passive bonuses handled elsewhere
+                const apexHealthPercent = monster.health / monster.maxHealth;
+                monster.rageBonus = 1 + (1 - apexHealthPercent) * 1.5; // Enhanced rage effect
                 break;
         }
     }
@@ -711,6 +775,36 @@ class DungeonSymbiosis {
         this.logMessage(`Monster evolved into ${monster.name}!`);
     }
     
+    fusionEvolve(monster1Id, monster2Id, newType) {
+        const monster1 = this.state.monsters.find(m => m.id === monster1Id);
+        const monster2 = this.state.monsters.find(m => m.id === monster2Id);
+        const newMonsterType = this.state.monsterTypes[newType];
+        
+        if (!monster1 || !monster2 || !newMonsterType || !this.canAfford(newMonsterType.cost)) return;
+        
+        this.deductResources(newMonsterType.cost);
+        
+        // Transform the first monster into the fusion result
+        monster1.type = newType;
+        monster1.name = newMonsterType.name;
+        monster1.health = newMonsterType.health;
+        monster1.maxHealth = newMonsterType.health;
+        monster1.attack = newMonsterType.attack;
+        
+        // Copy over production rates from the monster type
+        monster1.biomassRate = newMonsterType.biomassRate || 0;
+        monster1.manaRate = newMonsterType.manaRate || 0;
+        monster1.nutrientRate = newMonsterType.nutrientRate || 0;
+        
+        monster1.evolutionPossible = false;
+        monster1.age = 0;
+        
+        // Remove the second monster (consumed in fusion)
+        this.state.monsters = this.state.monsters.filter(m => m.id !== monster2Id);
+        
+        this.logMessage(`Fusion successful! ${monster1.name} emerged from the fusion!`);
+    }
+    
     logMessage(message) {
         const log = document.getElementById('invasion-log');
         const p = document.createElement('p');
@@ -1020,21 +1114,58 @@ class DungeonSymbiosis {
                     const canAfford = this.canAfford(evolutionMonsterType.cost);
                     const hasEvolvableMonsters = group.evolutionReady > 0;
                     
+                    // Check if this is a fusion evolution
+                    let isFusion = false;
+                    let hasFusionRequirements = false;
+                    let fusionRequirementsText = '';
+                    
+                    if (evolutionMonsterType.fusionRequirements) {
+                        isFusion = true;
+                        const req1 = evolutionMonsterType.fusionRequirements[0];
+                        const req2 = evolutionMonsterType.fusionRequirements[1];
+                        
+                        // Count ready monsters of each required type
+                        const req1Ready = this.state.monsters.filter(m => 
+                            m.type === req1 && m.evolutionPossible
+                        ).length;
+                        const req2Ready = this.state.monsters.filter(m => 
+                            m.type === req2 && m.evolutionPossible
+                        ).length;
+                        
+                        hasFusionRequirements = req1Ready > 0 && req2Ready > 0;
+                        fusionRequirementsText = `Need: ${this.state.monsterTypes[req1].name} + ${this.state.monsterTypes[req2].name}`;
+                    }
+                    
                     // Determine the state of the evolution option
                     let stateClass = '';
                     let stateText = '';
                     
-                    if (!hasEvolvableMonsters && !canAfford) {
-                        stateClass = 'disabled';
-                        stateText = ' (Need age & resources)';
-                    } else if (!hasEvolvableMonsters) {
-                        stateClass = 'disabled';
-                        stateText = ' (Need 30+ age)';
-                    } else if (!canAfford) {
-                        stateClass = 'disabled';
-                        stateText = ' (Need resources)';
+                    if (isFusion) {
+                        if (!hasFusionRequirements && !canAfford) {
+                            stateClass = 'disabled';
+                            stateText = ' (Need both slimes & resources)';
+                        } else if (!hasFusionRequirements) {
+                            stateClass = 'disabled';
+                            stateText = ' (Need both slimes ready)';
+                        } else if (!canAfford) {
+                            stateClass = 'disabled';
+                            stateText = ' (Need resources)';
+                        } else {
+                            stateText = ' (Ready to fuse!)';
+                        }
                     } else {
-                        stateText = ` (${group.evolutionReady} ready)`;
+                        if (!hasEvolvableMonsters && !canAfford) {
+                            stateClass = 'disabled';
+                            stateText = ' (Need age & resources)';
+                        } else if (!hasEvolvableMonsters) {
+                            stateClass = 'disabled';
+                            stateText = ' (Need 30+ age)';
+                        } else if (!canAfford) {
+                            stateClass = 'disabled';
+                            stateText = ' (Need resources)';
+                        } else {
+                            stateText = ` (${group.evolutionReady} ready)`;
+                        }
                     }
                     
                     const costText = Object.keys(evolutionMonsterType.cost)
@@ -1056,6 +1187,9 @@ class DungeonSymbiosis {
                             case 'resource_conversion': specialText = ' • Converts 5 Biomass → 2 Mana + 1 Nutrients every 30s'; break;
                             case 'leadership': specialText = ' • Leadership: Boosts nearby monsters'; break;
                             case 'rage': specialText = ' • Rage: Attack increases when damaged'; break;
+                            case 'toxic_mastery': specialText = ' • Toxic Mastery: Ultimate poison abilities + spawning'; break;
+                            case 'crystal_mastery': specialText = ' • Crystal Mastery: Superior defense + resource conversion'; break;
+                            case 'apex_mastery': specialText = ' • Apex Mastery: Combat supremacy + leadership'; break;
                         }
                     }
                     
@@ -1065,6 +1199,9 @@ class DungeonSymbiosis {
                     }
                     if (specialText) {
                         benefitsDisplay += (benefitsDisplay ? '\n' : '') + specialText;
+                    }
+                    if (fusionRequirementsText) {
+                        benefitsDisplay = fusionRequirementsText + '\n' + benefitsDisplay;
                     }
                     
                     newEvolutionData[monsterType].evolutions.push({
@@ -1076,7 +1213,9 @@ class DungeonSymbiosis {
                         stats: `HP: ${evolutionMonsterType.health} | ATK: ${evolutionMonsterType.attack}`,
                         stateClass,
                         canAfford,
-                        hasEvolvableMonsters
+                        hasEvolvableMonsters: isFusion ? hasFusionRequirements : hasEvolvableMonsters,
+                        isFusion,
+                        fusionRequirements: evolutionMonsterType.fusionRequirements
                     });
                 });
             }
@@ -1147,7 +1286,7 @@ class DungeonSymbiosis {
                     
                     // Use a single click handler with immediate execution
                     optionDiv.addEventListener('click', () => {
-                        this.handleEvolutionClick(monsterType, evolution.evolutionType);
+                        this.handleEvolutionClick(monsterType, evolution.evolutionType, evolution.isFusion, evolution.fusionRequirements);
                     }, { once: true });
                 } else {
                     optionDiv.style.cursor = 'not-allowed';
@@ -1161,25 +1300,46 @@ class DungeonSymbiosis {
         });
     }
     
-    handleEvolutionClick(monsterType, evolutionType) {
-        // Find the first evolution-ready monster of this type
-        const readyMonster = this.state.monsters.find(m => 
-            m.type === monsterType && m.evolutionPossible
-        );
-        
-        if (!readyMonster) {
-            console.log('No ready monster found');
-            return;
-        }
-        
+    handleEvolutionClick(monsterType, evolutionType, isFusion = false, fusionRequirements = null) {
         const evolutionMonsterType = this.state.monsterTypes[evolutionType];
         if (!this.canAfford(evolutionMonsterType.cost)) {
             console.log('Cannot afford evolution');
             return;
         }
         
-        // Perform the evolution
-        this.evolveMonster(readyMonster.id, evolutionType);
+        if (isFusion && fusionRequirements) {
+            // Handle fusion evolution - need both required monster types
+            const req1 = fusionRequirements[0];
+            const req2 = fusionRequirements[1];
+            
+            const readyMonster1 = this.state.monsters.find(m => 
+                m.type === req1 && m.evolutionPossible
+            );
+            const readyMonster2 = this.state.monsters.find(m => 
+                m.type === req2 && m.evolutionPossible
+            );
+            
+            if (!readyMonster1 || !readyMonster2) {
+                console.log('Missing required monsters for fusion');
+                return;
+            }
+            
+            // Perform fusion evolution
+            this.fusionEvolve(readyMonster1.id, readyMonster2.id, evolutionType);
+        } else {
+            // Handle regular evolution
+            const readyMonster = this.state.monsters.find(m => 
+                m.type === monsterType && m.evolutionPossible
+            );
+            
+            if (!readyMonster) {
+                console.log('No ready monster found');
+                return;
+            }
+            
+            // Perform regular evolution
+            this.evolveMonster(readyMonster.id, evolutionType);
+        }
         
         // Force immediate UI update
         this.updateEvolutionOptions();
