@@ -1,11 +1,376 @@
+// Constants and Configuration
+const GAME_CONFIG = {
+    UPDATE_INTERVAL: 100,
+    EVOLUTION_AGE_THRESHOLD: 30,
+    DUNGEON_LEVEL_BONUS: 0.05,
+    INVASION_BASE_TIMER: 60,
+    INVASION_RANDOM_RANGE: 60,
+    LOG_MESSAGE_LIMIT: 10
+};
+
+const MAJOR_UPGRADES = {
+    TYPES: ['Symbiosis Mastery', 'Crystal Enhancement', 'Combat Mastery', 'Toxic Evolution'],
+    DESCRIPTIONS: [
+        'All synergy bonuses +10%',
+        'Crystal monsters +50% production',
+        'All monsters +25% attack',
+        'Poison abilities enhanced +30%'
+    ]
+};
+
+// Utility Classes
+class ResourceManager {
+    constructor(initialResources = { biomass: 10, mana: 5, nutrients: 3 }) {
+        this.resources = { ...initialResources };
+    }
+
+    canAfford(cost) {
+        return Object.keys(cost).every(resource => 
+            this.resources[resource] >= cost[resource]
+        );
+    }
+
+    deduct(cost) {
+        if (!this.canAfford(cost)) return false;
+        Object.keys(cost).forEach(resource => {
+            this.resources[resource] -= cost[resource];
+        });
+        return true;
+    }
+
+    add(resources) {
+        Object.keys(resources).forEach(resource => {
+            this.resources[resource] = (this.resources[resource] || 0) + resources[resource];
+        });
+    }
+
+    get(resource) {
+        return this.resources[resource] || 0;
+    }
+
+    set(resource, amount) {
+        this.resources[resource] = amount;
+    }
+
+    roundAll() {
+        Object.keys(this.resources).forEach(key => {
+            this.resources[key] = Math.round(this.resources[key] * 10) / 10;
+        });
+    }
+
+    getAll() {
+        return { ...this.resources };
+    }
+}
+
+class SpecialAbilitiesManager {
+    static processAbility(monster, deltaTime, gameInstance) {
+        const monsterType = gameInstance.state.monsterTypes[monster.type];
+        if (!monsterType.special) return;
+
+        if (!monster.specialTimer) monster.specialTimer = 0;
+        monster.specialTimer += deltaTime;
+
+        const abilities = {
+            spawn_minions: () => this.handleSpawnMinions(monster, gameInstance),
+            resource_conversion: () => this.handleResourceConversion(monster, gameInstance),
+            rage: () => this.handleRage(monster),
+            toxic_mastery: () => this.handleToxicMastery(monster, gameInstance),
+            crystal_mastery: () => this.handleCrystalMastery(monster, gameInstance),
+            apex_mastery: () => this.handleApexMastery(monster)
+        };
+
+        const handler = abilities[monsterType.special];
+        if (handler) handler();
+    }
+
+    static handleSpawnMinions(monster, gameInstance) {
+        if (monster.specialTimer >= 120) {
+            monster.specialTimer = 0;
+            gameInstance.spawnMinion('slime');
+            gameInstance.logMessage(`${monster.name} spawned a Basic Slime!`);
+        }
+    }
+
+    static handleResourceConversion(monster, gameInstance) {
+        if (monster.specialTimer >= 30 && gameInstance.state.resourceManager.get('biomass') >= 5) {
+            monster.specialTimer = 0;
+            gameInstance.state.resourceManager.deduct({ biomass: 5 });
+            gameInstance.state.resourceManager.add({ mana: 2, nutrients: 1 });
+        }
+    }
+
+    static handleRage(monster) {
+        const healthPercent = monster.health / monster.maxHealth;
+        monster.rageBonus = 1 + (1 - healthPercent);
+    }
+
+    static handleToxicMastery(monster, gameInstance) {
+        if (monster.specialTimer >= 90) {
+            monster.specialTimer = 0;
+            gameInstance.spawnMinion('poison_slime');
+            gameInstance.logMessage(`${monster.name} spawned a Poison Slime minion!`);
+        }
+    }
+
+    static handleCrystalMastery(monster, gameInstance) {
+        if (monster.specialTimer >= 20 && gameInstance.state.resourceManager.get('biomass') >= 10) {
+            monster.specialTimer = 0;
+            gameInstance.state.resourceManager.deduct({ biomass: 10 });
+            gameInstance.state.resourceManager.add({ mana: 5, nutrients: 3 });
+        }
+    }
+
+    static handleApexMastery(monster) {
+        const healthPercent = monster.health / monster.maxHealth;
+        monster.rageBonus = 1 + (1 - healthPercent) * 1.5;
+    }
+}
+
+class EvolutionManager {
+    static checkFusionRequirements(evolutionType, monsters, monsterTypes) {
+        const evolutionMonsterType = monsterTypes[evolutionType];
+        if (!evolutionMonsterType.fusionRequirements) return { possible: false };
+
+        const [req1, req2] = evolutionMonsterType.fusionRequirements;
+        const readyMonster1 = monsters.find(m => m.type === req1 && m.evolutionPossible);
+        const readyMonster2 = monsters.find(m => m.type === req2 && m.evolutionPossible);
+
+        return {
+            possible: readyMonster1 && readyMonster2,
+            monster1: readyMonster1,
+            monster2: readyMonster2,
+            requirementsText: `Need: ${monsterTypes[req1].name} + ${monsterTypes[req2].name}`
+        };
+    }
+
+    static getSpecialAbilityText(special) {
+        const abilities = {
+            'poison_aura': ' • Poison Aura: Damages heroes over time',
+            'spawn_minions': ' • Spawns free Basic Slimes every 2 minutes',
+            'crystal_armor': ' • Crystal Armor: Reduces incoming damage by 30%',
+            'resource_conversion': ' • Converts 5 Biomass → 2 Mana + 1 Nutrients every 30s',
+            'leadership': ' • Leadership: Boosts nearby monsters',
+            'rage': ' • Rage: Attack increases when damaged',
+            'toxic_mastery': ' • Toxic Mastery: Ultimate poison abilities + spawning',
+            'crystal_mastery': ' • Crystal Mastery: Superior defense + resource conversion',
+            'apex_mastery': ' • Apex Mastery: Combat supremacy + leadership'
+        };
+        return abilities[special] || '';
+    }
+}
+
+// Data Templates
+class DataTemplates {
+    static getMonsterTypes() {
+        return {
+            slime: {
+                name: 'Basic Slime',
+                health: 20,
+                attack: 3,
+                biomassRate: 0.5,
+                cost: { biomass: 5 },
+                evolvesTo: ['poison_slime', 'crystal_slime', 'warrior_slime'],
+                habitat: 'caves'
+            },
+            poison_slime: {
+                name: 'Poison Slime',
+                health: 35,
+                attack: 5,
+                biomassRate: 0.3,
+                manaRate: 0.2,
+                cost: { biomass: 15 },
+                evolvesFrom: 'slime',
+                evolvesTo: ['toxic_horror', 'venomous_broodmother'],
+                habitat: 'swamps',
+                synergy: ['crystal_slime']
+            },
+            crystal_slime: {
+                name: 'Crystal Slime',
+                health: 50,
+                attack: 4,
+                nutrientRate: 0.1,
+                cost: { biomass: 25 },
+                evolvesFrom: 'slime',
+                evolvesTo: ['gem_guardian', 'crystal_hive'],
+                habitat: 'crystalCaves',
+                synergy: ['poison_slime']
+            },
+            warrior_slime: {
+                name: 'Warrior Slime',
+                health: 60,
+                attack: 8,
+                biomassRate: 0.2,
+                cost: { biomass: 20, mana: 5 },
+                evolvesFrom: 'slime',
+                evolvesTo: ['slime_champion', 'berserker_slime'],
+                habitat: 'barracks',
+                synergy: ['warrior_slime']
+            },
+            toxic_horror: {
+                name: 'Toxic Horror',
+                health: 80,
+                attack: 12,
+                manaRate: 0.4,
+                biomassRate: 0.1,
+                cost: { biomass: 30, mana: 15 },
+                evolvesFrom: 'poison_slime',
+                evolvesTo: ['toxic_overlord'],
+                habitat: 'swamps',
+                special: 'poison_aura'
+            },
+            venomous_broodmother: {
+                name: 'Venomous Broodmother',
+                health: 70,
+                attack: 8,
+                manaRate: 0.3,
+                biomassRate: 0.6,
+                cost: { biomass: 35, mana: 20 },
+                evolvesFrom: 'poison_slime',
+                evolvesTo: ['toxic_overlord'],
+                habitat: 'nursery',
+                special: 'spawn_minions'
+            },
+            gem_guardian: {
+                name: 'Gem Guardian',
+                health: 120,
+                attack: 10,
+                nutrientRate: 0.2,
+                cost: { biomass: 40, nutrients: 15 },
+                evolvesFrom: 'crystal_slime',
+                evolvesTo: ['crystal_sovereign'],
+                habitat: 'crystalCaves',
+                special: 'crystal_armor'
+            },
+            crystal_hive: {
+                name: 'Crystal Hive',
+                health: 90,
+                attack: 6,
+                nutrientRate: 0.3,
+                manaRate: 0.1,
+                cost: { biomass: 45, nutrients: 20 },
+                evolvesFrom: 'crystal_slime',
+                evolvesTo: ['crystal_sovereign'],
+                habitat: 'crystalCaves',
+                special: 'resource_conversion'
+            },
+            slime_champion: {
+                name: 'Slime Champion',
+                health: 100,
+                attack: 15,
+                biomassRate: 0.3,
+                cost: { biomass: 35, mana: 10, nutrients: 5 },
+                evolvesFrom: 'warrior_slime',
+                evolvesTo: ['apex_warrior'],
+                habitat: 'barracks',
+                special: 'leadership'
+            },
+            berserker_slime: {
+                name: 'Berserker Slime',
+                health: 80,
+                attack: 20,
+                biomassRate: 0.1,
+                cost: { biomass: 30, mana: 15 },
+                evolvesFrom: 'warrior_slime',
+                evolvesTo: ['apex_warrior'],
+                habitat: 'battlegrounds',
+                special: 'rage'
+            },
+            // Fusion Slimes
+            toxic_overlord: {
+                name: 'Toxic Overlord',
+                health: 150,
+                attack: 25,
+                manaRate: 0.6,
+                biomassRate: 0.4,
+                cost: { biomass: 80, mana: 50, nutrients: 20 },
+                fusionRequirements: ['toxic_horror', 'venomous_broodmother'],
+                habitat: 'swamps',
+                special: 'toxic_mastery'
+            },
+            crystal_sovereign: {
+                name: 'Crystal Sovereign',
+                health: 180,
+                attack: 20,
+                nutrientRate: 0.5,
+                manaRate: 0.3,
+                cost: { biomass: 100, mana: 40, nutrients: 30 },
+                fusionRequirements: ['gem_guardian', 'crystal_hive'],
+                habitat: 'crystalCaves',
+                special: 'crystal_mastery'
+            },
+            apex_warrior: {
+                name: 'Apex Warrior',
+                health: 200,
+                attack: 40,
+                biomassRate: 0.5,
+                cost: { biomass: 120, mana: 60, nutrients: 25 },
+                fusionRequirements: ['slime_champion', 'berserker_slime'],
+                habitat: 'battlegrounds',
+                special: 'apex_mastery'
+            }
+        };
+    }
+
+    static getHeroTypes() {
+        return [
+            {
+                name: 'Novice Adventurer',
+                health: 30,
+                attack: 8,
+                loot: { biomass: 3, mana: 1 },
+                weight: 40
+            },
+            {
+                name: 'Experienced Fighter',
+                health: 60,
+                attack: 12,
+                loot: { biomass: 8, mana: 3, nutrients: 1 },
+                weight: 30
+            },
+            {
+                name: 'Mage Hunter',
+                health: 45,
+                attack: 10,
+                loot: { biomass: 5, mana: 8, nutrients: 2 },
+                special: 'mana_drain',
+                weight: 20
+            },
+            {
+                name: 'Elite Paladin',
+                health: 100,
+                attack: 15,
+                loot: { biomass: 15, mana: 10, nutrients: 5 },
+                special: 'holy_aura',
+                weight: 8
+            },
+            {
+                name: 'Dungeon Lord',
+                health: 150,
+                attack: 25,
+                loot: { biomass: 25, mana: 20, nutrients: 15 },
+                special: 'boss',
+                weight: 2
+            }
+        ];
+    }
+
+    static getHabitats() {
+        return {
+            caves: { name: 'Dark Caves', unlocked: true, capacity: 10, bonus: { biomass: 1.1 } },
+            swamps: { name: 'Toxic Swamps', unlocked: false, capacity: 8, bonus: { mana: 1.2 }, cost: { biomass: 50, mana: 20 } },
+            crystalCaves: { name: 'Crystal Caverns', unlocked: false, capacity: 6, bonus: { nutrients: 1.3 }, cost: { biomass: 60, nutrients: 15 } },
+            barracks: { name: 'War Barracks', unlocked: false, capacity: 12, bonus: { attack: 1.2 }, cost: { biomass: 80, mana: 15, nutrients: 10 } },
+            nursery: { name: 'Breeding Pools', unlocked: false, capacity: 5, bonus: { biomass: 1.5 }, cost: { biomass: 40, mana: 25 } },
+            battlegrounds: { name: 'Battle Arena', unlocked: false, capacity: 8, bonus: { attack: 1.4 }, cost: { biomass: 70, mana: 30, nutrients: 10 } }
+        };
+    }
+}
+
 // Game State
 class GameState {
     constructor() {
-        this.resources = {
-            biomass: 10,
-            mana: 5,
-            nutrients: 3
-        };
+        this.resourceManager = new ResourceManager();
         
         this.dungeon = {
             health: 100,
@@ -30,222 +395,52 @@ class GameState {
         ];
         
         this.heroes = [];
-        this.invasionTimer = 60;
+        this.invasionTimer = GAME_CONFIG.INVASION_BASE_TIMER;
         this.gameTime = 0;
         
-        this.monsterTypes = {
-            slime: {
-                name: 'Basic Slime',
-                health: 20,
-                attack: 3,
-                biomassRate: 0.5,
-                cost: { biomass: 5 },
-                evolvesTo: ['poison_slime', 'crystal_slime', 'warrior_slime'],
-                habitat: 'caves'
-            },
-            poison_slime: {
-                name: 'Poison Slime',
-                health: 35,
-                attack: 5,
-                biomassRate: 0.3,
-                manaRate: 0.2,
-                cost: { biomass: 15 },
-                evolvesFrom: 'slime',
-                evolvesTo: ['toxic_horror', 'venomous_broodmother'],
-                habitat: 'swamps',
-                synergy: ['crystal_slime'] // Gets bonus near crystal slimes
-            },
-            crystal_slime: {
-                name: 'Crystal Slime',
-                health: 50,
-                attack: 4,
-                nutrientRate: 0.1,
-                cost: { biomass: 25 },
-                evolvesFrom: 'slime',
-                evolvesTo: ['gem_guardian', 'crystal_hive'],
-                habitat: 'crystalCaves',
-                synergy: ['poison_slime'] // Gets bonus near poison slimes
-            },
-            warrior_slime: {
-                name: 'Warrior Slime',
-                health: 60,
-                attack: 8,
-                biomassRate: 0.2,
-                cost: { biomass: 20, mana: 5 },
-                evolvesFrom: 'slime',
-                evolvesTo: ['slime_champion', 'berserker_slime'],
-                habitat: 'barracks',
-                synergy: ['warrior_slime'] // Pack hunting bonus
-            },
-            toxic_horror: {
-                name: 'Toxic Horror',
-                health: 80,
-                attack: 12,
-                manaRate: 0.4,
-                biomassRate: 0.1,
-                cost: { biomass: 30, mana: 15 },
-                evolvesFrom: 'poison_slime',
-                evolvesTo: ['toxic_overlord'], // Can evolve to fusion slime
-                habitat: 'swamps',
-                special: 'poison_aura' // Damages all heroes over time
-            },
-            venomous_broodmother: {
-                name: 'Venomous Broodmother',
-                health: 70,
-                attack: 8,
-                manaRate: 0.3,
-                biomassRate: 0.6, // Produces extra biomass by spawning mini-slimes
-                cost: { biomass: 35, mana: 20 },
-                evolvesFrom: 'poison_slime',
-                evolvesTo: ['toxic_overlord'], // Can evolve to fusion slime
-                habitat: 'nursery',
-                special: 'spawn_minions' // Occasionally spawns free basic slimes
-            },
-            gem_guardian: {
-                name: 'Gem Guardian',
-                health: 120,
-                attack: 10,
-                nutrientRate: 0.2,
-                cost: { biomass: 40, nutrients: 15 },
-                evolvesFrom: 'crystal_slime',
-                evolvesTo: ['crystal_sovereign'], // Can evolve to fusion slime
-                habitat: 'crystalCaves',
-                special: 'crystal_armor' // Reduces incoming damage
-            },
-            crystal_hive: {
-                name: 'Crystal Hive',
-                health: 90,
-                attack: 6,
-                nutrientRate: 0.3,
-                manaRate: 0.1,
-                cost: { biomass: 45, nutrients: 20 },
-                evolvesFrom: 'crystal_slime',
-                evolvesTo: ['crystal_sovereign'], // Can evolve to fusion slime
-                habitat: 'crystalCaves',
-                special: 'resource_conversion' // Converts biomass to mana/nutrients
-            },
-            slime_champion: {
-                name: 'Slime Champion',
-                health: 100,
-                attack: 15,
-                biomassRate: 0.3,
-                cost: { biomass: 35, mana: 10, nutrients: 5 },
-                evolvesFrom: 'warrior_slime',
-                evolvesTo: ['apex_warrior'], // Can evolve to fusion slime
-                habitat: 'barracks',
-                special: 'leadership' // Boosts nearby monsters
-            },
-            berserker_slime: {
-                name: 'Berserker Slime',
-                health: 80,
-                attack: 20,
-                biomassRate: 0.1,
-                cost: { biomass: 30, mana: 15 },
-                evolvesFrom: 'warrior_slime',
-                evolvesTo: ['apex_warrior'], // Can evolve to fusion slime
-                habitat: 'battlegrounds',
-                special: 'rage' // Attack increases when damaged
-            },
-            // Fusion Slimes - Require both end-tier slimes
-            toxic_overlord: {
-                name: 'Toxic Overlord',
-                health: 150,
-                attack: 25,
-                manaRate: 0.6,
-                biomassRate: 0.4,
-                cost: { biomass: 80, mana: 50, nutrients: 20 },
-                fusionRequirements: ['toxic_horror', 'venomous_broodmother'],
-                habitat: 'swamps',
-                special: 'toxic_mastery' // Enhanced poison aura + spawns toxic minions
-            },
-            crystal_sovereign: {
-                name: 'Crystal Sovereign',
-                health: 180,
-                attack: 20,
-                nutrientRate: 0.5,
-                manaRate: 0.3,
-                cost: { biomass: 100, mana: 40, nutrients: 30 },
-                fusionRequirements: ['gem_guardian', 'crystal_hive'],
-                habitat: 'crystalCaves',
-                special: 'crystal_mastery' // Enhanced armor + mass resource conversion
-            },
-            apex_warrior: {
-                name: 'Apex Warrior',
-                health: 200,
-                attack: 40,
-                biomassRate: 0.5,
-                cost: { biomass: 120, mana: 60, nutrients: 25 },
-                fusionRequirements: ['slime_champion', 'berserker_slime'],
-                habitat: 'battlegrounds',
-                special: 'apex_mastery' // Leadership + rage + pack hunting combined
-            }
-        };
+        this.monsterTypes = DataTemplates.getMonsterTypes();
+        this.heroTypes = DataTemplates.getHeroTypes();
+        this.habitats = DataTemplates.getHabitats();
         
-        this.heroTypes = [
-            {
-                name: 'Novice Adventurer',
-                health: 30,
-                attack: 8,
-                loot: { biomass: 3, mana: 1 },
-                weight: 40 // Higher chance to spawn
-            },
-            {
-                name: 'Experienced Fighter',
-                health: 60,
-                attack: 12,
-                loot: { biomass: 8, mana: 3, nutrients: 1 },
-                weight: 30
-            },
-            {
-                name: 'Mage Hunter',
-                health: 45,
-                attack: 10,
-                loot: { biomass: 5, mana: 8, nutrients: 2 },
-                special: 'mana_drain', // Steals extra mana
-                weight: 20
-            },
-            {
-                name: 'Elite Paladin',
-                health: 100,
-                attack: 15,
-                loot: { biomass: 15, mana: 10, nutrients: 5 },
-                special: 'holy_aura', // Extra damage to poison monsters
-                weight: 8
-            },
-            {
-                name: 'Dungeon Lord',
-                health: 150,
-                attack: 25,
-                loot: { biomass: 25, mana: 20, nutrients: 15 },
-                special: 'boss', // Can only appear after certain time
-                weight: 2
-            }
-        ];
+        // Dynamic pricing system
+        this.slimesPurchased = 0;
+        this.baseSlimeCost = { biomass: 5 }; // Store original cost
         
-        this.habitats = {
-            caves: { name: 'Dark Caves', unlocked: true, capacity: 10, bonus: { biomass: 1.1 } },
-            swamps: { name: 'Toxic Swamps', unlocked: false, capacity: 8, bonus: { mana: 1.2 }, cost: { biomass: 50, mana: 20 } },
-            crystalCaves: { name: 'Crystal Caverns', unlocked: false, capacity: 6, bonus: { nutrients: 1.3 }, cost: { biomass: 60, nutrients: 15 } },
-            barracks: { name: 'War Barracks', unlocked: false, capacity: 12, bonus: { attack: 1.2 }, cost: { biomass: 80, mana: 15, nutrients: 10 } },
-            nursery: { name: 'Breeding Pools', unlocked: false, capacity: 5, bonus: { biomass: 1.5 }, cost: { biomass: 40, mana: 25 } },
-            battlegrounds: { name: 'Battle Arena', unlocked: false, capacity: 8, bonus: { attack: 1.4 }, cost: { biomass: 70, mana: 30, nutrients: 10 } }
+        // Upgrade bonuses
+        this.crystalBonus = 1.0;
+        this.combatBonus = 1.0;
+        this.toxicBonus = 1.0;
+        this.synergyBonus = 0.1;
+    }
+
+    getSlimeCost() {
+        // Increase cost by 10% for each slime purchased (multiplicative)
+        const multiplier = Math.pow(1.1, this.slimesPurchased);
+        return {
+            biomass: Math.ceil(this.baseSlimeCost.biomass * multiplier)
         };
     }
+
+    incrementSlimePurchases() {
+        this.slimesPurchased++;
+        // Update the monster type cost for UI display
+        this.monsterTypes.slime.cost = this.getSlimeCost();
+    }
 }
+        
 
 // Game Engine
 class DungeonSymbiosis {
     constructor() {
         this.state = new GameState();
         this.lastUpdate = Date.now();
-        this.updateInterval = 100; // 100ms updates
+        this.updateInterval = GAME_CONFIG.UPDATE_INTERVAL;
         
         this.initializeUI();
         this.startGameLoop();
     }
     
     initializeUI() {
-        // Button event listeners
         document.getElementById('spawn-slime').addEventListener('click', () => {
             this.spawnMonster('slime');
         });
@@ -265,70 +460,62 @@ class DungeonSymbiosis {
     
     update() {
         const now = Date.now();
-        const deltaTime = (now - this.lastUpdate) / 1000; // Convert to seconds
+        const deltaTime = (now - this.lastUpdate) / 1000;
         this.lastUpdate = now;
         
         this.state.gameTime += deltaTime;
         
-        // Generate resources from monsters
         this.updateMonsters(deltaTime);
-        
-        // Handle hero invasions
         this.updateInvasions(deltaTime);
-        
-        // Update UI
         this.updateDisplay();
     }
     
     updateMonsters(deltaTime) {
+        // Calculate global slime bonus (all slimes provide +0.5 biomass/s total)
+        const slimeCount = this.state.monsters.filter(monster => 
+            monster.type === 'slime' || monster.name.includes('Slime')
+        ).length;
+        const globalSlimeBonus = slimeCount * 0.5;
+        
+        // Add global slime biomass bonus
+        if (globalSlimeBonus > 0) {
+            this.state.resourceManager.add({ biomass: globalSlimeBonus * deltaTime });
+        }
+        
         this.state.monsters.forEach(monster => {
             monster.age += deltaTime;
             
             const monsterType = this.state.monsterTypes[monster.type];
-            
-            // Calculate synergy bonuses
             const synergyBonus = this.calculateSynergyBonus(monster);
+            const dungeonBonus = 1 + (this.state.dungeon.level - 1) * GAME_CONFIG.DUNGEON_LEVEL_BONUS;
             
-            // Calculate dungeon level bonus (5% per level above 1)
-            const dungeonBonus = 1 + (this.state.dungeon.level - 1) * 0.05;
-            
-            // Apply special upgrade bonuses
             let specialBonus = 1.0;
-            
-            // Crystal bonus for crystal-type monsters
             if ((monster.type.includes('crystal') || monster.type.includes('gem')) && this.state.crystalBonus) {
                 specialBonus *= this.state.crystalBonus;
             }
             
-            // Generate resources using monster's individual rates with all bonuses
-            if (monster.biomassRate !== undefined ? monster.biomassRate : monsterType.biomassRate) {
-                const rate = (monster.biomassRate !== undefined ? monster.biomassRate : monsterType.biomassRate) * synergyBonus.biomass * dungeonBonus * specialBonus;
-                this.state.resources.biomass += rate * deltaTime;
-            }
+            // Generate resources
+            const resourceRates = {
+                biomass: (monster.biomassRate !== undefined ? monster.biomassRate : monsterType.biomassRate) || 0,
+                mana: (monster.manaRate !== undefined ? monster.manaRate : monsterType.manaRate) || 0,
+                nutrients: (monster.nutrientRate !== undefined ? monster.nutrientRate : monsterType.nutrientRate) || 0
+            };
             
-            if (monster.manaRate !== undefined ? monster.manaRate : monsterType.manaRate) {
-                const rate = (monster.manaRate !== undefined ? monster.manaRate : monsterType.manaRate) * synergyBonus.mana * dungeonBonus * specialBonus;
-                this.state.resources.mana += rate * deltaTime;
-            }
+            Object.entries(resourceRates).forEach(([resource, rate]) => {
+                if (rate > 0) {
+                    const finalRate = rate * synergyBonus[resource] * dungeonBonus * specialBonus;
+                    this.state.resourceManager.add({ [resource]: finalRate * deltaTime });
+                }
+            });
             
-            if (monster.nutrientRate !== undefined ? monster.nutrientRate : monsterType.nutrientRate) {
-                const rate = (monster.nutrientRate !== undefined ? monster.nutrientRate : monsterType.nutrientRate) * synergyBonus.nutrients * dungeonBonus * specialBonus;
-                this.state.resources.nutrients += rate * deltaTime;
-            }
+            SpecialAbilitiesManager.processAbility(monster, deltaTime, this);
             
-            // Handle special abilities
-            this.processSpecialAbilities(monster, deltaTime);
-            
-            // Check for evolution possibility
-            if (monster.age > 30 && monsterType.evolvesTo && !monster.evolutionPossible) {
+            if (monster.age > GAME_CONFIG.EVOLUTION_AGE_THRESHOLD && monsterType.evolvesTo && !monster.evolutionPossible) {
                 monster.evolutionPossible = true;
             }
         });
         
-        // Round resources to reasonable precision
-        Object.keys(this.state.resources).forEach(key => {
-            this.state.resources[key] = Math.round(this.state.resources[key] * 10) / 10;
-        });
+        this.state.resourceManager.roundAll();
     }
     
     calculateSynergyBonus(monster) {
@@ -336,7 +523,7 @@ class DungeonSymbiosis {
         let bonus = { biomass: 1.0, mana: 1.0, nutrients: 1.0, attack: 1.0 };
         
         if (monsterType.synergy) {
-            const baseMultiplier = this.state.synergyBonus || 0.1; // Enhanced by major upgrades
+            const baseMultiplier = this.state.synergyBonus || 0.1;
             
             monsterType.synergy.forEach(synergyType => {
                 const nearbyCount = this.state.monsters.filter(m => 
@@ -345,132 +532,72 @@ class DungeonSymbiosis {
                 
                 if (nearbyCount > 0) {
                     const synergyMultiplier = 1 + (nearbyCount * baseMultiplier);
-                    bonus.biomass *= synergyMultiplier;
-                    bonus.mana *= synergyMultiplier;
-                    bonus.nutrients *= synergyMultiplier;
-                    bonus.attack *= synergyMultiplier;
+                    Object.keys(bonus).forEach(key => {
+                        bonus[key] *= synergyMultiplier;
+                    });
                 }
             });
         }
         
-        // Pack hunting bonus for warrior slimes
         if (monster.type === 'warrior_slime') {
             const packSize = this.state.monsters.filter(m => m.type === 'warrior_slime').length;
             if (packSize >= 3) {
-                bonus.attack *= 1.5; // 50% attack bonus for pack of 3+
+                bonus.attack *= 1.5;
             }
         }
         
         return bonus;
     }
-    
-    processSpecialAbilities(monster, deltaTime) {
-        const monsterType = this.state.monsterTypes[monster.type];
-        
-        if (!monsterType.special) return;
-        
-        // Initialize special ability timers if needed
-        if (!monster.specialTimer) monster.specialTimer = 0;
-        monster.specialTimer += deltaTime;
-        
-        switch (monsterType.special) {
-            case 'spawn_minions':
-                if (monster.specialTimer >= 120) { // Every 2 minutes
-                    monster.specialTimer = 0;
-                    this.spawnMinion('slime');
-                    this.logMessage(`${monster.name} spawned a Basic Slime!`);
-                }
-                break;
-                
-            case 'resource_conversion':
-                if (monster.specialTimer >= 30 && this.state.resources.biomass >= 5) { // Every 30 seconds
-                    monster.specialTimer = 0;
-                    this.state.resources.biomass -= 5;
-                    this.state.resources.mana += 2;
-                    this.state.resources.nutrients += 1;
-                }
-                break;
-                
-            case 'leadership':
-                // Passive bonus handled in synergy calculation
-                break;
-                
-            case 'rage':
-                // Attack bonus based on missing health
-                const healthPercent = monster.health / monster.maxHealth;
-                monster.rageBonus = 1 + (1 - healthPercent); // Up to 2x attack when near death
-                break;
-                
-            case 'toxic_mastery':
-                // Enhanced poison aura + spawns toxic minions
-                if (monster.specialTimer >= 90) { // Every 90 seconds
-                    monster.specialTimer = 0;
-                    this.spawnMinion('poison_slime');
-                    this.logMessage(`${monster.name} spawned a Poison Slime minion!`);
-                }
-                break;
-                
-            case 'crystal_mastery':
-                // Enhanced armor + mass resource conversion
-                if (monster.specialTimer >= 20 && this.state.resources.biomass >= 10) { // Every 20 seconds
-                    monster.specialTimer = 0;
-                    this.state.resources.biomass -= 10;
-                    this.state.resources.mana += 5;
-                    this.state.resources.nutrients += 3;
-                }
-                break;
-                
-            case 'apex_mastery':
-                // Leadership + rage + pack hunting combined - passive bonuses handled elsewhere
-                const apexHealthPercent = monster.health / monster.maxHealth;
-                monster.rageBonus = 1 + (1 - apexHealthPercent) * 1.5; // Enhanced rage effect
-                break;
-        }
-    }
-    
+
     spawnMinion(type) {
         const monsterType = this.state.monsterTypes[type];
-        
-        // Create free minion (no cost)
         const newMonster = {
-            id: Date.now() + Math.random(), // Ensure unique ID
+            id: Date.now() + Math.random(),
             type: type,
             name: monsterType.name + ' (Minion)',
-            health: Math.floor(monsterType.health * 0.7), // Weaker than normal
+            health: Math.floor(monsterType.health * 0.7),
             maxHealth: Math.floor(monsterType.health * 0.7),
             attack: Math.floor(monsterType.attack * 0.7),
-            biomassRate: (monsterType.biomassRate || 0) * 0.5, // Half production
+            biomassRate: (monsterType.biomassRate || 0) * 0.5,
             manaRate: (monsterType.manaRate || 0) * 0.5,
             nutrientRate: (monsterType.nutrientRate || 0) * 0.5,
             age: 0,
             evolutionPossible: false,
             isMinion: true
         };
-        
         this.state.monsters.push(newMonster);
     }
-    
+
     updateInvasions(deltaTime) {
         this.state.invasionTimer -= deltaTime;
         
         if (this.state.invasionTimer <= 0) {
             this.spawnHero();
-            this.state.invasionTimer = 60 + Math.random() * 60; // 60-120 seconds between invasions
+            this.state.invasionTimer = GAME_CONFIG.INVASION_BASE_TIMER + Math.random() * GAME_CONFIG.INVASION_RANDOM_RANGE;
         }
     }
-    
+
     spawnMonster(type) {
         const monsterType = this.state.monsterTypes[type];
-        
         if (!monsterType) return false;
         
-        // Check if player has enough resources
-        if (!this.canAfford(monsterType.cost)) return false;
+        // Use dynamic pricing for slimes
+        let cost;
+        if (type === 'slime') {
+            cost = this.state.getSlimeCost();
+        } else {
+            cost = monsterType.cost;
+        }
         
-        // Deduct resources
-        this.deductResources(monsterType.cost);
+        if (!this.state.resourceManager.canAfford(cost)) return false;
         
-        // Create new monster
+        this.state.resourceManager.deduct(cost);
+        
+        // Increment slime purchases for dynamic pricing
+        if (type === 'slime') {
+            this.state.incrementSlimePurchases();
+        }
+        
         const newMonster = {
             id: Date.now(),
             type: type,
@@ -487,12 +614,22 @@ class DungeonSymbiosis {
         
         this.state.monsters.push(newMonster);
         this.logMessage(`Spawned ${newMonster.name}!`);
-        
         return true;
     }
     
+    logMessage(message) {
+        const log = document.getElementById('invasion-log');
+        const p = document.createElement('p');
+        p.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+        log.appendChild(p);
+        
+        while (log.children.length > GAME_CONFIG.LOG_MESSAGE_LIMIT) {
+            log.removeChild(log.firstChild);
+        }
+        log.scrollTop = log.scrollHeight;
+    }
+
     spawnHero() {
-        // Weighted hero selection
         const totalWeight = this.state.heroTypes.reduce((sum, hero) => sum + hero.weight, 0);
         let random = Math.random() * totalWeight;
         
@@ -505,10 +642,8 @@ class DungeonSymbiosis {
             }
         }
         
-        // Special conditions for certain heroes
         if (selectedHero.special === 'boss' && this.state.gameTime < 300) {
-            // Boss can only appear after 5 minutes
-            selectedHero = this.state.heroTypes[1]; // Fallback to experienced fighter
+            selectedHero = this.state.heroTypes[1];
         }
         
         const hero = {
@@ -524,19 +659,16 @@ class DungeonSymbiosis {
         this.state.heroes.push(hero);
         this.logMessage(`${hero.name} has invaded your dungeon!`);
         
-        // Start combat immediately
         setTimeout(() => this.resolveCombat(hero), 1000);
     }
     
     resolveCombat(hero) {
         if (this.state.monsters.length === 0) {
-            // No monsters to defend - hero damages dungeon directly
             let damage = hero.attack;
             
-            // Special hero abilities when attacking core
             if (hero.special === 'mana_drain') {
-                const manaDrained = Math.min(this.state.resources.mana, 10);
-                this.state.resources.mana -= manaDrained;
+                const manaDrained = Math.min(this.state.resourceManager.get('mana'), 10);
+                this.state.resourceManager.deduct({ mana: manaDrained });
                 this.logMessage(`${hero.name} drains ${manaDrained} mana!`);
             }
             
@@ -548,120 +680,96 @@ class DungeonSymbiosis {
                 return;
             }
             
-            // Hero takes loot and leaves
+            const stolen = {};
             Object.keys(hero.loot).forEach(resource => {
-                const stolen = Math.min(hero.loot[resource], this.state.resources[resource]);
-                this.state.resources[resource] -= stolen;
+                stolen[resource] = Math.min(hero.loot[resource], this.state.resourceManager.get(resource));
             });
+            this.state.resourceManager.deduct(stolen);
             this.logMessage(`${hero.name} steals resources and leaves...`);
         } else {
-            // Combat with monsters
-            let totalMonsterAttack = 0;
+            this.handleMonsterCombat(hero);
+        }
+        
+        this.state.heroes = this.state.heroes.filter(h => h.id !== hero.id);
+    }
+
+    handleMonsterCombat(hero) {
+        let totalMonsterAttack = 0;
+        
+        this.state.monsters.forEach(monster => {
+            const synergyBonus = this.calculateSynergyBonus(monster);
+            let attack = monster.attack * synergyBonus.attack;
             
-            this.state.monsters.forEach(monster => {
-                const synergyBonus = this.calculateSynergyBonus(monster);
-                let attack = monster.attack * synergyBonus.attack;
-                
-                // Apply combat bonus from major upgrades
-                if (this.state.combatBonus) {
-                    attack *= this.state.combatBonus;
-                }
-                
-                // Apply special monster bonuses
-                if (monster.rageBonus) {
-                    attack *= monster.rageBonus;
-                }
-                
-                totalMonsterAttack += attack;
-                
-                // Special abilities during combat
-                const monsterType = this.state.monsterTypes[monster.type];
-                if (monsterType.special === 'poison_aura') {
-                    let poisonDamage = 2;
-                    // Enhanced poison damage from major upgrades
-                    if (this.state.toxicBonus) {
-                        poisonDamage *= this.state.toxicBonus;
-                    }
-                    hero.health -= poisonDamage;
-                }
-                if (monsterType.special === 'crystal_armor') {
-                    // Reduce incoming damage (handled below)
-                }
-            });
-            
-            // Apply hero special abilities
-            if (hero.special === 'holy_aura') {
-                const poisonMonsters = this.state.monsters.filter(m => m.type.includes('poison')).length;
-                totalMonsterAttack *= Math.max(0.5, 1 - (poisonMonsters * 0.1)); // Reduces poison monster effectiveness
+            if (this.state.combatBonus) {
+                attack *= this.state.combatBonus;
             }
             
-            if (totalMonsterAttack >= hero.health) {
-                // Monsters win
-                this.logMessage(`Your monsters defeat ${hero.name}! Gained resources.`);
-                Object.keys(hero.loot).forEach(resource => {
-                    this.state.resources[resource] += hero.loot[resource];
-                });
-                
-                // Bonus for defeating stronger heroes
-                if (hero.special === 'boss') {
-                    this.state.resources.biomass += 10;
-                    this.state.resources.mana += 10;
-                    this.state.resources.nutrients += 10;
-                    this.logMessage('Bonus resources for defeating a boss!');
+            if (monster.rageBonus) {
+                attack *= monster.rageBonus;
+            }
+            
+            totalMonsterAttack += attack;
+            
+            const monsterType = this.state.monsterTypes[monster.type];
+            if (monsterType.special === 'poison_aura') {
+                let poisonDamage = 2;
+                if (this.state.toxicBonus) {
+                    poisonDamage *= this.state.toxicBonus;
                 }
-            } else {
-                // Hero wins - damage monsters
-                let remainingDamage = hero.attack;
-                
-                // Sort monsters by health (weakest first)
-                const sortedMonsters = [...this.state.monsters].sort((a, b) => a.health - b.health);
-                
-                for (const monster of sortedMonsters) {
-                    if (remainingDamage <= 0) break;
-                    
-                    const monsterType = this.state.monsterTypes[monster.type];
-                    let damage = Math.min(remainingDamage, monster.health);
-                    
-                    // Crystal armor reduces damage
-                    if (monsterType.special === 'crystal_armor') {
-                        damage = Math.floor(damage * 0.7);
-                    }
-                    
-                    monster.health -= damage;
-                    remainingDamage -= damage;
-                    
-                    if (monster.health <= 0) {
-                        this.state.monsters = this.state.monsters.filter(m => m.id !== monster.id);
-                        this.logMessage(`${hero.name} defeats ${monster.name}!`);
-                    }
-                }
-                
-                this.logMessage(`${hero.name} damages your monsters and escapes!`);
+                hero.health -= poisonDamage;
+            }
+        });
+        
+        if (hero.special === 'holy_aura') {
+            const poisonMonsters = this.state.monsters.filter(m => m.type.includes('poison')).length;
+            totalMonsterAttack *= Math.max(0.5, 1 - (poisonMonsters * 0.1));
+        }
+        
+        if (totalMonsterAttack >= hero.health) {
+            this.logMessage(`Your monsters defeat ${hero.name}! Gained resources.`);
+            this.state.resourceManager.add(hero.loot);
+            
+            if (hero.special === 'boss') {
+                this.state.resourceManager.add({ biomass: 10, mana: 10, nutrients: 10 });
+                this.logMessage('Bonus resources for defeating a boss!');
+            }
+        } else {
+            this.damageMonsters(hero);
+        }
+    }
+
+    damageMonsters(hero) {
+        let remainingDamage = hero.attack;
+        const sortedMonsters = [...this.state.monsters].sort((a, b) => a.health - b.health);
+        
+        for (const monster of sortedMonsters) {
+            if (remainingDamage <= 0) break;
+            
+            const monsterType = this.state.monsterTypes[monster.type];
+            let damage = Math.min(remainingDamage, monster.health);
+            
+            if (monsterType.special === 'crystal_armor') {
+                damage = Math.floor(damage * 0.7);
+            }
+            
+            monster.health -= damage;
+            remainingDamage -= damage;
+            
+            if (monster.health <= 0) {
+                this.state.monsters = this.state.monsters.filter(m => m.id !== monster.id);
+                this.logMessage(`${hero.name} defeats ${monster.name}!`);
             }
         }
         
-        // Remove hero from active list
-        this.state.heroes = this.state.heroes.filter(h => h.id !== hero.id);
-    }
-    
-    canAfford(cost) {
-        return Object.keys(cost).every(resource => 
-            this.state.resources[resource] >= cost[resource]
-        );
-    }
-    
-    deductResources(cost) {
-        Object.keys(cost).forEach(resource => {
-            this.state.resources[resource] -= cost[resource];
-        });
+        this.logMessage(`${hero.name} damages your monsters and escapes!`);
     }
     
     upgradeDungeon() {
         const cost = this.getDungeonUpgradeCost();
         
-        if (!this.canAfford(cost)) return;
+        if (!this.state.resourceManager.canAfford(cost)) return;
         
-        this.deductResources(cost);
+        this.state.resourceManager.deduct(cost);
         this.state.dungeon.level++;
         this.state.dungeon.maxHealth += 50;
         this.state.dungeon.health = this.state.dungeon.maxHealth;
@@ -669,7 +777,6 @@ class DungeonSymbiosis {
         const benefits = this.getDungeonUpgradeBenefits();
         let upgradeMessage = `Dungeon upgraded to level ${this.state.dungeon.level}! Max health: ${this.state.dungeon.maxHealth}. Resource generation: +${benefits.currentResourceBonus}% (total).`;
         
-        // Special bonuses every 5 levels
         if (this.state.dungeon.level % 5 === 0) {
             const specialBonus = this.applyMajorUpgrade(this.state.dungeon.level);
             upgradeMessage += ` MAJOR UPGRADE: ${specialBonus}`;
@@ -677,182 +784,124 @@ class DungeonSymbiosis {
         
         this.logMessage(upgradeMessage);
     }
-    
+
     applyMajorUpgrade(level) {
-        const upgradeType = Math.floor(level / 5);
-        
-        switch (upgradeType % 4) {
-            case 1: // Level 5, 25, 45, etc. - Crystal Enhancement
-                this.applyCrystalBonus();
-                return "Crystal Enhancement! All crystal-type monsters gain +50% production permanently!";
-                
-            case 2: // Level 10, 30, 50, etc. - Combat Mastery
-                this.applyCombatBonus();
-                return "Combat Mastery! All monsters gain +25% attack permanently!";
-                
-            case 3: // Level 15, 35, 55, etc. - Toxic Evolution
-                this.applyToxicBonus();
-                return "Toxic Evolution! All poison-type monsters gain enhanced abilities!";
-                
-            case 0: // Level 20, 40, 60, etc. - Symbiosis Mastery
-                this.applySymbiosisBonus();
+        const upgradeType = Math.floor(level / 5) % 4;
+        const upgrades = [
+            () => {
+                this.state.synergyBonus += 0.1;
                 return "Symbiosis Mastery! All synergy bonuses increased by +10%!";
-        }
-    }
-    
-    applyCrystalBonus() {
-        // Permanently boost crystal-type monsters
-        if (!this.state.crystalBonus) this.state.crystalBonus = 1.0;
-        this.state.crystalBonus += 0.5;
-        
-        // Apply to existing crystal monsters
-        this.state.monsters.forEach(monster => {
-            if (monster.type.includes('crystal') || monster.type.includes('gem')) {
-                monster.crystalBoosted = true;
+            },
+            () => {
+                this.state.crystalBonus += 0.5;
+                this.state.monsters.forEach(monster => {
+                    if (monster.type.includes('crystal') || monster.type.includes('gem')) {
+                        monster.crystalBoosted = true;
+                    }
+                });
+                return "Crystal Enhancement! All crystal-type monsters gain +50% production permanently!";
+            },
+            () => {
+                this.state.combatBonus += 0.25;
+                return "Combat Mastery! All monsters gain +25% attack permanently!";
+            },
+            () => {
+                this.state.toxicBonus += 0.3;
+                return "Toxic Evolution! All poison-type monsters gain enhanced abilities!";
             }
-        });
+        ];
+        
+        return upgrades[upgradeType]();
     }
-    
-    applyCombatBonus() {
-        // Permanently boost all monster attack
-        if (!this.state.combatBonus) this.state.combatBonus = 1.0;
-        this.state.combatBonus += 0.25;
-    }
-    
-    applyToxicBonus() {
-        // Enhance poison abilities
-        if (!this.state.toxicBonus) this.state.toxicBonus = 1.0;
-        this.state.toxicBonus += 0.3;
-    }
-    
-    applySymbiosisBonus() {
-        // Enhance synergy bonuses
-        if (!this.state.synergyBonus) this.state.synergyBonus = 0.1;
-        this.state.synergyBonus += 0.1;
-    }
-    
+
     getDungeonUpgradeCost() {
-        // Cost increases very aggressively: base cost * level^3
         const baseCost = 50;
         const scaledCost = Math.floor(baseCost * Math.pow(this.state.dungeon.level, 3));
         return { nutrients: scaledCost };
     }
-    
+
     getDungeonUpgradeBenefits() {
         const currentLevel = this.state.dungeon.level;
-        const currentBonus = Math.round((currentLevel - 1) * 5);
-        const nextBonus = Math.round(currentLevel * 5);
-        
         return {
             healthIncrease: 50,
-            currentResourceBonus: currentBonus,
-            nextResourceBonus: nextBonus
+            currentResourceBonus: Math.round((currentLevel - 1) * 5),
+            nextResourceBonus: Math.round(currentLevel * 5)
         };
     }
-    
+
     evolveMonster(monsterId, newType) {
         const monster = this.state.monsters.find(m => m.id === monsterId);
         const newMonsterType = this.state.monsterTypes[newType];
         
-        if (!monster || !newMonsterType || !this.canAfford(newMonsterType.cost)) return;
+        if (!monster || !newMonsterType || !this.state.resourceManager.canAfford(newMonsterType.cost)) return;
         
-        this.deductResources(newMonsterType.cost);
+        this.state.resourceManager.deduct(newMonsterType.cost);
         
-        monster.type = newType;
-        monster.name = newMonsterType.name;
-        monster.health = newMonsterType.health;
-        monster.maxHealth = newMonsterType.health;
-        monster.attack = newMonsterType.attack;
-        
-        // Copy over production rates from the monster type
-        monster.biomassRate = newMonsterType.biomassRate || 0;
-        monster.manaRate = newMonsterType.manaRate || 0;
-        monster.nutrientRate = newMonsterType.nutrientRate || 0;
-        
-        monster.evolutionPossible = false;
-        monster.age = 0;
+        Object.assign(monster, {
+            type: newType,
+            name: newMonsterType.name,
+            health: newMonsterType.health,
+            maxHealth: newMonsterType.health,
+            attack: newMonsterType.attack,
+            biomassRate: newMonsterType.biomassRate || 0,
+            manaRate: newMonsterType.manaRate || 0,
+            nutrientRate: newMonsterType.nutrientRate || 0,
+            evolutionPossible: false,
+            age: 0
+        });
         
         this.logMessage(`Monster evolved into ${monster.name}!`);
     }
-    
+
     fusionEvolve(monster1Id, monster2Id, newType) {
         const monster1 = this.state.monsters.find(m => m.id === monster1Id);
         const monster2 = this.state.monsters.find(m => m.id === monster2Id);
         const newMonsterType = this.state.monsterTypes[newType];
         
-        if (!monster1 || !monster2 || !newMonsterType || !this.canAfford(newMonsterType.cost)) return;
+        if (!monster1 || !monster2 || !newMonsterType || !this.state.resourceManager.canAfford(newMonsterType.cost)) return;
         
-        this.deductResources(newMonsterType.cost);
+        this.state.resourceManager.deduct(newMonsterType.cost);
         
-        // Transform the first monster into the fusion result
-        monster1.type = newType;
-        monster1.name = newMonsterType.name;
-        monster1.health = newMonsterType.health;
-        monster1.maxHealth = newMonsterType.health;
-        monster1.attack = newMonsterType.attack;
+        Object.assign(monster1, {
+            type: newType,
+            name: newMonsterType.name,
+            health: newMonsterType.health,
+            maxHealth: newMonsterType.health,
+            attack: newMonsterType.attack,
+            biomassRate: newMonsterType.biomassRate || 0,
+            manaRate: newMonsterType.manaRate || 0,
+            nutrientRate: newMonsterType.nutrientRate || 0,
+            evolutionPossible: false,
+            age: 0
+        });
         
-        // Copy over production rates from the monster type
-        monster1.biomassRate = newMonsterType.biomassRate || 0;
-        monster1.manaRate = newMonsterType.manaRate || 0;
-        monster1.nutrientRate = newMonsterType.nutrientRate || 0;
-        
-        monster1.evolutionPossible = false;
-        monster1.age = 0;
-        
-        // Remove the second monster (consumed in fusion)
         this.state.monsters = this.state.monsters.filter(m => m.id !== monster2Id);
-        
         this.logMessage(`Fusion successful! ${monster1.name} emerged from the fusion!`);
     }
-    
-    logMessage(message) {
-        const log = document.getElementById('invasion-log');
-        const p = document.createElement('p');
-        p.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
-        log.appendChild(p);
-        
-        // Keep only last 10 messages
-        while (log.children.length > 10) {
-            log.removeChild(log.firstChild);
-        }
-        
-        log.scrollTop = log.scrollHeight;
-    }
-    
+
     gameOver() {
         alert('Game Over! Your dungeon core has been destroyed!');
-        // Reset game or show restart options
         this.state = new GameState();
         this.logMessage('Dungeon core destroyed! Starting anew...');
     }
     
     updateDisplay() {
-        // Update resources
         const dungeonBonus = Math.round((this.state.dungeon.level - 1) * 5);
         const bonusText = dungeonBonus > 0 ? ` (+${dungeonBonus}%)` : '';
         
-        document.getElementById('biomass').textContent = Math.floor(this.state.resources.biomass);
-        document.getElementById('mana').textContent = Math.floor(this.state.resources.mana);
-        document.getElementById('nutrients').textContent = Math.floor(this.state.resources.nutrients);
+        const resources = this.state.resourceManager.getAll();
+        document.getElementById('biomass').textContent = Math.floor(resources.biomass);
+        document.getElementById('mana').textContent = Math.floor(resources.mana);
+        document.getElementById('nutrients').textContent = Math.floor(resources.nutrients);
         
-        // Update dungeon status
         document.getElementById('dungeon-health').textContent = 
             `${Math.max(0, Math.floor(this.state.dungeon.health))}/${this.state.dungeon.maxHealth} (Level ${this.state.dungeon.level}${bonusText})`;
         document.getElementById('monster-count').textContent = this.state.monsters.length;
-        
-        // Update invasion timer
         document.getElementById('invasion-timer').textContent = Math.ceil(this.state.invasionTimer);
         
-        // Update monster list
         this.updateMonsterList();
-        
-        // Update button states
         this.updateButtonStates();
-        
-        // Update habitat list
         this.updateHabitatList();
-        
-        // Update evolution options
         this.updateEvolutionOptions();
     }
     
@@ -946,29 +995,37 @@ class DungeonSymbiosis {
     }
     
     updateButtonStates() {
-        // Spawn slime button
         const spawnSlimeBtn = document.getElementById('spawn-slime');
-        const slimeCost = this.state.monsterTypes.slime.cost;
-        spawnSlimeBtn.disabled = !this.canAfford(slimeCost);
+        const slimeCost = this.state.getSlimeCost(); // Use dynamic cost
+        spawnSlimeBtn.disabled = !this.state.resourceManager.canAfford(slimeCost);
         
-        // Upgrade dungeon button
+        // Update button text to show current cost
+        const costText = `${slimeCost.biomass} Biomass`;
+        const purchasedText = this.state.slimesPurchased > 0 ? ` (${this.state.slimesPurchased} purchased)` : '';
+        spawnSlimeBtn.textContent = `Spawn Basic Slime (${costText})${purchasedText}`;
+        
+        // Add tooltip showing pricing information
+        if (this.state.slimesPurchased > 0) {
+            const nextCost = Math.ceil(this.state.baseSlimeCost.biomass * Math.pow(1.1, this.state.slimesPurchased + 1));
+            spawnSlimeBtn.title = `Current: ${slimeCost.biomass} Biomass | Next: ${nextCost} Biomass (×1.1 each purchase)`;
+        } else {
+            spawnSlimeBtn.title = `Base cost: ${this.state.baseSlimeCost.biomass} Biomass (increases by ×1.1 each purchase)`;
+        }
+        
         const upgradeDungeonBtn = document.getElementById('upgrade-dungeon');
         const upgradeCost = this.getDungeonUpgradeCost();
         const benefits = this.getDungeonUpgradeBenefits();
-        upgradeDungeonBtn.disabled = !this.canAfford(upgradeCost);
+        upgradeDungeonBtn.disabled = !this.state.resourceManager.canAfford(upgradeCost);
         
-        // Update button text with current cost and benefits
-        const costText = upgradeCost.nutrients;
+        const upgradeCostText = upgradeCost.nutrients;
         const nextBonusText = benefits.nextResourceBonus;
         const nextLevel = this.state.dungeon.level + 1;
         
-        let buttonText = `Upgrade Dungeon (${costText} Nutrients) - Level ${nextLevel}: +50 HP, +${nextBonusText}% Resources`;
+        let buttonText = `Upgrade Dungeon (${upgradeCostText} Nutrients) - Level ${nextLevel}: +50 HP, +${nextBonusText}% Resources`;
         
-        // Add major upgrade indicator
         if (nextLevel % 5 === 0) {
             const upgradeType = Math.floor(nextLevel / 5) % 4;
-            const majorUpgrades = ['Symbiosis Mastery', 'Crystal Enhancement', 'Combat Mastery', 'Toxic Evolution'];
-            buttonText += ` + MAJOR: ${majorUpgrades[upgradeType]}!`;
+            buttonText += ` + MAJOR: ${MAJOR_UPGRADES.TYPES[upgradeType]}!`;
         } else {
             const levelsToMajor = 5 - (nextLevel % 5);
             buttonText += ` (${levelsToMajor} to major upgrade)`;
@@ -976,19 +1033,11 @@ class DungeonSymbiosis {
         
         upgradeDungeonBtn.textContent = buttonText;
         
-        // Enhanced tooltip with more detailed info
         const upgradeType = Math.floor(nextLevel / 5) % 4;
-        const majorUpgradeDescriptions = [
-            'All synergy bonuses +10%',
-            'Crystal monsters +50% production',
-            'All monsters +25% attack',
-            'Poison abilities enhanced +30%'
-        ];
-        
-        let tooltipText = `Upgrade to Level ${nextLevel}\n• +50 Max Health\n• +5% Resource Generation\n• Cost: ${costText} Nutrients`;
+        let tooltipText = `Upgrade to Level ${nextLevel}\n• +50 Max Health\n• +5% Resource Generation\n• Cost: ${upgradeCostText} Nutrients`;
         
         if (nextLevel % 5 === 0) {
-            tooltipText += `\n\nMAJOR UPGRADE:\n• ${majorUpgradeDescriptions[upgradeType]}`;
+            tooltipText += `\n\nMAJOR UPGRADE:\n• ${MAJOR_UPGRADES.DESCRIPTIONS[upgradeType]}`;
         }
         
         upgradeDungeonBtn.title = tooltipText;
@@ -1013,7 +1062,7 @@ class DungeonSymbiosis {
                 unlocked: habitat.unlocked,
                 capacity: habitat.capacity,
                 bonusText,
-                canAfford: habitat.cost ? this.canAfford(habitat.cost) : true,
+                canAfford: habitat.cost ? this.state.resourceManager.canAfford(habitat.cost) : true,
                 cost: habitat.cost ? Object.keys(habitat.cost).map(resource => 
                     `${habitat.cost[resource]} ${resource}`
                 ).join(', ') : ''
@@ -1063,9 +1112,9 @@ class DungeonSymbiosis {
     unlockHabitat(habitatKey) {
         const habitat = this.state.habitats[habitatKey];
         
-        if (!habitat || habitat.unlocked || !this.canAfford(habitat.cost)) return;
+        if (!habitat || habitat.unlocked || !this.state.resourceManager.canAfford(habitat.cost)) return;
         
-        this.deductResources(habitat.cost);
+        this.state.resourceManager.deduct(habitat.cost);
         habitat.unlocked = true;
         
         this.logMessage(`Unlocked ${habitat.name}!`);
@@ -1111,7 +1160,7 @@ class DungeonSymbiosis {
                 
                 monsterTypeData.evolvesTo.forEach(evolutionType => {
                     const evolutionMonsterType = this.state.monsterTypes[evolutionType];
-                    const canAfford = this.canAfford(evolutionMonsterType.cost);
+                    const canAfford = this.state.resourceManager.canAfford(evolutionMonsterType.cost);
                     const hasEvolvableMonsters = group.evolutionReady > 0;
                     
                     // Check if this is a fusion evolution
@@ -1121,19 +1170,13 @@ class DungeonSymbiosis {
                     
                     if (evolutionMonsterType.fusionRequirements) {
                         isFusion = true;
-                        const req1 = evolutionMonsterType.fusionRequirements[0];
-                        const req2 = evolutionMonsterType.fusionRequirements[1];
-                        
-                        // Count ready monsters of each required type
-                        const req1Ready = this.state.monsters.filter(m => 
-                            m.type === req1 && m.evolutionPossible
-                        ).length;
-                        const req2Ready = this.state.monsters.filter(m => 
-                            m.type === req2 && m.evolutionPossible
-                        ).length;
-                        
-                        hasFusionRequirements = req1Ready > 0 && req2Ready > 0;
-                        fusionRequirementsText = `Need: ${this.state.monsterTypes[req1].name} + ${this.state.monsterTypes[req2].name}`;
+                        const fusion = EvolutionManager.checkFusionRequirements(
+                            evolutionType, 
+                            this.state.monsters, 
+                            this.state.monsterTypes
+                        );
+                        hasFusionRequirements = fusion.possible;
+                        fusionRequirementsText = fusion.requirementsText;
                     }
                     
                     // Determine the state of the evolution option
@@ -1180,17 +1223,7 @@ class DungeonSymbiosis {
                     
                     let specialText = '';
                     if (evolutionMonsterType.special) {
-                        switch (evolutionMonsterType.special) {
-                            case 'poison_aura': specialText = ' • Poison Aura: Damages heroes over time'; break;
-                            case 'spawn_minions': specialText = ' • Spawns free Basic Slimes every 2 minutes'; break;
-                            case 'crystal_armor': specialText = ' • Crystal Armor: Reduces incoming damage by 30%'; break;
-                            case 'resource_conversion': specialText = ' • Converts 5 Biomass → 2 Mana + 1 Nutrients every 30s'; break;
-                            case 'leadership': specialText = ' • Leadership: Boosts nearby monsters'; break;
-                            case 'rage': specialText = ' • Rage: Attack increases when damaged'; break;
-                            case 'toxic_mastery': specialText = ' • Toxic Mastery: Ultimate poison abilities + spawning'; break;
-                            case 'crystal_mastery': specialText = ' • Crystal Mastery: Superior defense + resource conversion'; break;
-                            case 'apex_mastery': specialText = ' • Apex Mastery: Combat supremacy + leadership'; break;
-                        }
+                        specialText = EvolutionManager.getSpecialAbilityText(evolutionMonsterType.special);
                     }
                     
                     let benefitsDisplay = '';
@@ -1302,32 +1335,25 @@ class DungeonSymbiosis {
     
     handleEvolutionClick(monsterType, evolutionType, isFusion = false, fusionRequirements = null) {
         const evolutionMonsterType = this.state.monsterTypes[evolutionType];
-        if (!this.canAfford(evolutionMonsterType.cost)) {
+        if (!this.state.resourceManager.canAfford(evolutionMonsterType.cost)) {
             console.log('Cannot afford evolution');
             return;
         }
         
         if (isFusion && fusionRequirements) {
-            // Handle fusion evolution - need both required monster types
-            const req1 = fusionRequirements[0];
-            const req2 = fusionRequirements[1];
-            
-            const readyMonster1 = this.state.monsters.find(m => 
-                m.type === req1 && m.evolutionPossible
-            );
-            const readyMonster2 = this.state.monsters.find(m => 
-                m.type === req2 && m.evolutionPossible
+            const fusion = EvolutionManager.checkFusionRequirements(
+                evolutionType, 
+                this.state.monsters, 
+                this.state.monsterTypes
             );
             
-            if (!readyMonster1 || !readyMonster2) {
+            if (!fusion.possible) {
                 console.log('Missing required monsters for fusion');
                 return;
             }
             
-            // Perform fusion evolution
-            this.fusionEvolve(readyMonster1.id, readyMonster2.id, evolutionType);
+            this.fusionEvolve(fusion.monster1.id, fusion.monster2.id, evolutionType);
         } else {
-            // Handle regular evolution
             const readyMonster = this.state.monsters.find(m => 
                 m.type === monsterType && m.evolutionPossible
             );
@@ -1337,11 +1363,9 @@ class DungeonSymbiosis {
                 return;
             }
             
-            // Perform regular evolution
             this.evolveMonster(readyMonster.id, evolutionType);
         }
         
-        // Force immediate UI update
         this.updateEvolutionOptions();
     }
 }
