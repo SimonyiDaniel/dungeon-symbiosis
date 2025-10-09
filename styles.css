@@ -1,0 +1,266 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+
+.game-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+header {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 2px solid #4a4a6a;
+}
+
+header h1 {
+    margin: 0 0 15px 0;
+    text-align: center;
+    color: #8a2be2;
+    text-shadow: 0 0 10px rgba(138, 43, 226, 0.5);
+}
+
+.dungeon-status {
+    display: flex;
+    justify-content: space-around;
+    gap: 20px;
+}
+
+.stat {
+    background: rgba(138, 43, 226, 0.1);
+    padding: 10px 15px;
+    border-radius: 5px;
+    border: 1px solid #8a2be2;
+}
+
+.label {
+    font-weight: bold;
+    color: #b19cd9;
+}
+
+main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+section {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 20px;
+    border-radius: 10px;
+    border: 2px solid #4a4a6a;
+}
+
+section h2 {
+    margin: 0 0 15px 0;
+    color: #8a2be2;
+    border-bottom: 2px solid #8a2be2;
+    padding-bottom: 10px;
+}
+
+.resources {
+    grid-column: 1 / 3;
+}
+
+.resource-grid {
+    display: flex;
+    gap: 20px;
+    justify-content: space-around;
+}
+
+.resource {
+    background: rgba(76, 175, 80, 0.1);
+    padding: 15px;
+    border-radius: 8px;
+    border: 2px solid #4caf50;
+    text-align: center;
+    flex: 1;
+}
+
+.resource-name {
+    display: block;
+    font-weight: bold;
+    color: #81c784;
+    margin-bottom: 5px;
+}
+
+.resource-amount {
+    display: block;
+    font-size: 1.5em;
+    color: #4caf50;
+    font-weight: bold;
+}
+
+.monster-list {
+    min-height: 150px;
+    background: rgba(139, 69, 19, 0.1);
+    border: 2px dashed #8b4513;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.monster {
+    background: rgba(255, 165, 0, 0.2);
+    border: 1px solid #ffa500;
+    border-radius: 5px;
+    padding: 10px;
+    margin: 5px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.monster-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.monster-name {
+    font-weight: bold;
+    color: #ffa500;
+}
+
+.monster-stats {
+    font-size: 0.9em;
+    color: #ffcc80;
+}
+
+.monster-production {
+    font-size: 0.85em;
+    color: #4caf50;
+    font-weight: bold;
+    margin-top: 3px;
+}
+
+.dungeon-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.action-btn {
+    background: linear-gradient(45deg, #8a2be2, #9932cc);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+    background: linear-gradient(45deg, #9932cc, #8a2be2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(138, 43, 226, 0.3);
+}
+
+.action-btn:disabled {
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.hero-status {
+    text-align: center;
+}
+
+.next-invasion {
+    background: rgba(244, 67, 54, 0.1);
+    border: 2px solid #f44336;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    font-weight: bold;
+    color: #ff6b6b;
+}
+
+.invasion-log {
+    background: rgba(33, 33, 33, 0.5);
+    border: 1px solid #666;
+    border-radius: 5px;
+    padding: 15px;
+    max-height: 150px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+}
+
+.invasion-log p {
+    margin: 5px 0;
+    color: #ccc;
+}
+
+.evolution-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.evolution-option {
+    background: rgba(63, 81, 181, 0.1);
+    border: 2px solid #3f51b5;
+    border-radius: 8px;
+    padding: 15px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.evolution-option:hover {
+    background: rgba(63, 81, 181, 0.2);
+    border-color: #5c6bc0;
+}
+
+.evolution-option.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: #666;
+}
+
+.evolution-option.evolving {
+    opacity: 0.7;
+    cursor: wait;
+    border-color: #ff9800;
+    background: rgba(255, 152, 0, 0.1);
+}
+
+.evolution-title {
+    font-weight: bold;
+    color: #5c6bc0;
+    margin-bottom: 5px;
+}
+
+.evolution-cost {
+    font-size: 0.9em;
+    color: #9e9e9e;
+}
+
+.evolution-available {
+    font-size: 0.85em;
+    color: #81c784;
+    margin-top: 5px;
+}
+
+@media (max-width: 768px) {
+    main {
+        grid-template-columns: 1fr;
+    }
+    
+    .resource-grid {
+        flex-direction: column;
+    }
+    
+    .dungeon-status {
+        flex-direction: column;
+        gap: 10px;
+    }
+}

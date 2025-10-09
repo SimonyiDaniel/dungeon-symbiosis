@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dungeon Symbiosis</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="game-container">
+        <header>
+            <h1>Dungeon Symbiosis</h1>
+            <div class="dungeon-status">
+                <div class="stat">
+                    <span class="label">Dungeon Health:</span>
+                    <span id="dungeon-health">100</span>/100
+                </div>
+                <div class="stat">
+                    <span class="label">Monster Count:</span>
+                    <span id="monster-count">1</span>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <section class="resources">
+                <h2>Resources</h2>
+                <div class="resource-grid">
+                    <div class="resource">
+                        <span class="resource-name">Biomass</span>
+                        <span class="resource-amount" id="biomass">10</span>
+                    </div>
+                    <div class="resource">
+                        <span class="resource-name">Mana</span>
+                        <span class="resource-amount" id="mana">5</span>
+                    </div>
+                    <div class="resource">
+                        <span class="resource-name">Nutrients</span>
+                        <span class="resource-amount" id="nutrients">3</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="dungeon-view">
+                <h2>Dungeon Ecosystem</h2>
+                <div class="monster-list" id="monster-list">
+                    <!-- Monsters will be dynamically added here -->
+                </div>
+                <div class="dungeon-actions">
+                    <button id="spawn-slime" class="action-btn">Spawn Slime (5 Biomass)</button>
+                    <button id="upgrade-dungeon" class="action-btn" disabled>Upgrade Dungeon (50 Nutrients)</button>
+                </div>
+            </section>
+
+            <section class="heroes">
+                <h2>Hero Invasions</h2>
+                <div class="hero-status">
+                    <div class="next-invasion">
+                        Next invasion in: <span id="invasion-timer">60</span>s
+                    </div>
+                    <div class="invasion-log" id="invasion-log">
+                        <p>Your dungeon awaits its first invasion...</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="evolution">
+                <h2>Evolution Tree</h2>
+                <div class="evolution-options" id="evolution-options">
+                    <!-- Evolution options will be added dynamically -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
