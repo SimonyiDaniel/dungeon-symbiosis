@@ -250,19 +250,30 @@ class DungeonSymbiosis {
             // Calculate synergy bonuses
             const synergyBonus = this.calculateSynergyBonus(monster);
             
-            // Generate resources using monster's individual rates with synergy bonuses
+            // Calculate dungeon level bonus (5% per level above 1)
+            const dungeonBonus = 1 + (this.state.dungeon.level - 1) * 0.05;
+            
+            // Apply special upgrade bonuses
+            let specialBonus = 1.0;
+            
+            // Crystal bonus for crystal-type monsters
+            if ((monster.type.includes('crystal') || monster.type.includes('gem')) && this.state.crystalBonus) {
+                specialBonus *= this.state.crystalBonus;
+            }
+            
+            // Generate resources using monster's individual rates with all bonuses
             if (monster.biomassRate !== undefined ? monster.biomassRate : monsterType.biomassRate) {
-                const rate = (monster.biomassRate !== undefined ? monster.biomassRate : monsterType.biomassRate) * synergyBonus.biomass;
+                const rate = (monster.biomassRate !== undefined ? monster.biomassRate : monsterType.biomassRate) * synergyBonus.biomass * dungeonBonus * specialBonus;
                 this.state.resources.biomass += rate * deltaTime;
             }
             
             if (monster.manaRate !== undefined ? monster.manaRate : monsterType.manaRate) {
-                const rate = (monster.manaRate !== undefined ? monster.manaRate : monsterType.manaRate) * synergyBonus.mana;
+                const rate = (monster.manaRate !== undefined ? monster.manaRate : monsterType.manaRate) * synergyBonus.mana * dungeonBonus * specialBonus;
                 this.state.resources.mana += rate * deltaTime;
             }
             
             if (monster.nutrientRate !== undefined ? monster.nutrientRate : monsterType.nutrientRate) {
-                const rate = (monster.nutrientRate !== undefined ? monster.nutrientRate : monsterType.nutrientRate) * synergyBonus.nutrients;
+                const rate = (monster.nutrientRate !== undefined ? monster.nutrientRate : monsterType.nutrientRate) * synergyBonus.nutrients * dungeonBonus * specialBonus;
                 this.state.resources.nutrients += rate * deltaTime;
             }
             
@@ -286,13 +297,15 @@ class DungeonSymbiosis {
         let bonus = { biomass: 1.0, mana: 1.0, nutrients: 1.0, attack: 1.0 };
         
         if (monsterType.synergy) {
+            const baseMultiplier = this.state.synergyBonus || 0.1; // Enhanced by major upgrades
+            
             monsterType.synergy.forEach(synergyType => {
                 const nearbyCount = this.state.monsters.filter(m => 
                     m.type === synergyType && m.id !== monster.id
                 ).length;
                 
                 if (nearbyCount > 0) {
-                    const synergyMultiplier = 1 + (nearbyCount * 0.1); // 10% bonus per synergy monster
+                    const synergyMultiplier = 1 + (nearbyCount * baseMultiplier);
                     bonus.biomass *= synergyMultiplier;
                     bonus.mana *= synergyMultiplier;
                     bonus.nutrients *= synergyMultiplier;
@@ -485,6 +498,11 @@ class DungeonSymbiosis {
                 const synergyBonus = this.calculateSynergyBonus(monster);
                 let attack = monster.attack * synergyBonus.attack;
                 
+                // Apply combat bonus from major upgrades
+                if (this.state.combatBonus) {
+                    attack *= this.state.combatBonus;
+                }
+                
                 // Apply special monster bonuses
                 if (monster.rageBonus) {
                     attack *= monster.rageBonus;
@@ -495,7 +513,12 @@ class DungeonSymbiosis {
                 // Special abilities during combat
                 const monsterType = this.state.monsterTypes[monster.type];
                 if (monsterType.special === 'poison_aura') {
-                    hero.health -= 2; // Poison damage
+                    let poisonDamage = 2;
+                    // Enhanced poison damage from major upgrades
+                    if (this.state.toxicBonus) {
+                        poisonDamage *= this.state.toxicBonus;
+                    }
+                    hero.health -= poisonDamage;
                 }
                 if (monsterType.special === 'crystal_armor') {
                     // Reduce incoming damage (handled below)
@@ -570,7 +593,7 @@ class DungeonSymbiosis {
     }
     
     upgradeDungeon() {
-        const cost = { nutrients: 50 };
+        const cost = this.getDungeonUpgradeCost();
         
         if (!this.canAfford(cost)) return;
         
@@ -579,7 +602,88 @@ class DungeonSymbiosis {
         this.state.dungeon.maxHealth += 50;
         this.state.dungeon.health = this.state.dungeon.maxHealth;
         
-        this.logMessage(`Dungeon upgraded to level ${this.state.dungeon.level}!`);
+        const benefits = this.getDungeonUpgradeBenefits();
+        let upgradeMessage = `Dungeon upgraded to level ${this.state.dungeon.level}! Max health: ${this.state.dungeon.maxHealth}. Resource generation: +${benefits.currentResourceBonus}% (total).`;
+        
+        // Special bonuses every 5 levels
+        if (this.state.dungeon.level % 5 === 0) {
+            const specialBonus = this.applyMajorUpgrade(this.state.dungeon.level);
+            upgradeMessage += ` MAJOR UPGRADE: ${specialBonus}`;
+        }
+        
+        this.logMessage(upgradeMessage);
+    }
+    
+    applyMajorUpgrade(level) {
+        const upgradeType = Math.floor(level / 5);
+        
+        switch (upgradeType % 4) {
+            case 1: // Level 5, 25, 45, etc. - Crystal Enhancement
+                this.applyCrystalBonus();
+                return "Crystal Enhancement! All crystal-type monsters gain +50% production permanently!";
+                
+            case 2: // Level 10, 30, 50, etc. - Combat Mastery
+                this.applyCombatBonus();
+                return "Combat Mastery! All monsters gain +25% attack permanently!";
+                
+            case 3: // Level 15, 35, 55, etc. - Toxic Evolution
+                this.applyToxicBonus();
+                return "Toxic Evolution! All poison-type monsters gain enhanced abilities!";
+                
+            case 0: // Level 20, 40, 60, etc. - Symbiosis Mastery
+                this.applySymbiosisBonus();
+                return "Symbiosis Mastery! All synergy bonuses increased by +10%!";
+        }
+    }
+    
+    applyCrystalBonus() {
+        // Permanently boost crystal-type monsters
+        if (!this.state.crystalBonus) this.state.crystalBonus = 1.0;
+        this.state.crystalBonus += 0.5;
+        
+        // Apply to existing crystal monsters
+        this.state.monsters.forEach(monster => {
+            if (monster.type.includes('crystal') || monster.type.includes('gem')) {
+                monster.crystalBoosted = true;
+            }
+        });
+    }
+    
+    applyCombatBonus() {
+        // Permanently boost all monster attack
+        if (!this.state.combatBonus) this.state.combatBonus = 1.0;
+        this.state.combatBonus += 0.25;
+    }
+    
+    applyToxicBonus() {
+        // Enhance poison abilities
+        if (!this.state.toxicBonus) this.state.toxicBonus = 1.0;
+        this.state.toxicBonus += 0.3;
+    }
+    
+    applySymbiosisBonus() {
+        // Enhance synergy bonuses
+        if (!this.state.synergyBonus) this.state.synergyBonus = 0.1;
+        this.state.synergyBonus += 0.1;
+    }
+    
+    getDungeonUpgradeCost() {
+        // Cost increases very aggressively: base cost * level^3
+        const baseCost = 50;
+        const scaledCost = Math.floor(baseCost * Math.pow(this.state.dungeon.level, 3));
+        return { nutrients: scaledCost };
+    }
+    
+    getDungeonUpgradeBenefits() {
+        const currentLevel = this.state.dungeon.level;
+        const currentBonus = Math.round((currentLevel - 1) * 5);
+        const nextBonus = Math.round(currentLevel * 5);
+        
+        return {
+            healthIncrease: 50,
+            currentResourceBonus: currentBonus,
+            nextResourceBonus: nextBonus
+        };
     }
     
     evolveMonster(monsterId, newType) {
@@ -630,12 +734,16 @@ class DungeonSymbiosis {
     
     updateDisplay() {
         // Update resources
+        const dungeonBonus = Math.round((this.state.dungeon.level - 1) * 5);
+        const bonusText = dungeonBonus > 0 ? ` (+${dungeonBonus}%)` : '';
+        
         document.getElementById('biomass').textContent = Math.floor(this.state.resources.biomass);
         document.getElementById('mana').textContent = Math.floor(this.state.resources.mana);
         document.getElementById('nutrients').textContent = Math.floor(this.state.resources.nutrients);
         
         // Update dungeon status
-        document.getElementById('dungeon-health').textContent = Math.max(0, Math.floor(this.state.dungeon.health));
+        document.getElementById('dungeon-health').textContent = 
+            `${Math.max(0, Math.floor(this.state.dungeon.health))}/${this.state.dungeon.maxHealth} (Level ${this.state.dungeon.level}${bonusText})`;
         document.getElementById('monster-count').textContent = this.state.monsters.length;
         
         // Update invasion timer
@@ -751,8 +859,45 @@ class DungeonSymbiosis {
         
         // Upgrade dungeon button
         const upgradeDungeonBtn = document.getElementById('upgrade-dungeon');
-        const upgradeCost = { nutrients: 50 };
+        const upgradeCost = this.getDungeonUpgradeCost();
+        const benefits = this.getDungeonUpgradeBenefits();
         upgradeDungeonBtn.disabled = !this.canAfford(upgradeCost);
+        
+        // Update button text with current cost and benefits
+        const costText = upgradeCost.nutrients;
+        const nextBonusText = benefits.nextResourceBonus;
+        const nextLevel = this.state.dungeon.level + 1;
+        
+        let buttonText = `Upgrade Dungeon (${costText} Nutrients) - Level ${nextLevel}: +50 HP, +${nextBonusText}% Resources`;
+        
+        // Add major upgrade indicator
+        if (nextLevel % 5 === 0) {
+            const upgradeType = Math.floor(nextLevel / 5) % 4;
+            const majorUpgrades = ['Symbiosis Mastery', 'Crystal Enhancement', 'Combat Mastery', 'Toxic Evolution'];
+            buttonText += ` + MAJOR: ${majorUpgrades[upgradeType]}!`;
+        } else {
+            const levelsToMajor = 5 - (nextLevel % 5);
+            buttonText += ` (${levelsToMajor} to major upgrade)`;
+        }
+        
+        upgradeDungeonBtn.textContent = buttonText;
+        
+        // Enhanced tooltip with more detailed info
+        const upgradeType = Math.floor(nextLevel / 5) % 4;
+        const majorUpgradeDescriptions = [
+            'All synergy bonuses +10%',
+            'Crystal monsters +50% production',
+            'All monsters +25% attack',
+            'Poison abilities enhanced +30%'
+        ];
+        
+        let tooltipText = `Upgrade to Level ${nextLevel}\n• +50 Max Health\n• +5% Resource Generation\n• Cost: ${costText} Nutrients`;
+        
+        if (nextLevel % 5 === 0) {
+            tooltipText += `\n\nMAJOR UPGRADE:\n• ${majorUpgradeDescriptions[upgradeType]}`;
+        }
+        
+        upgradeDungeonBtn.title = tooltipText;
     }
     
     updateHabitatList() {
