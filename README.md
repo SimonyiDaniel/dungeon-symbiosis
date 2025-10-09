@@ -21,6 +21,14 @@ In Dungeon Symbiosis, you control a sentient dungeon that must grow and evolve i
 - **Combat System**: Automatic combat resolution based on total monster attack vs hero health
 - **Dungeon Health**: Core health system with upgrade mechanics
 
+### ✅ Phase 2: Advanced Ecosystem Features
+- **Extended Evolution Paths**: 10 unique monster types with branching evolutions
+- **Monster Synergies**: Monsters get bonuses when near compatible types
+- **Special Abilities**: Poison auras, minion spawning, crystal armor, rage mechanics
+- **Habitat System**: Unlock different environments with capacity limits and bonuses
+- **Advanced Heroes**: 5 hero types with special abilities and weighted spawning
+- **Pack Bonuses**: Warrior slimes get attack bonuses when grouped together
+
 ### 🎮 How to Play
 1. **Start Simple**: Begin with basic slimes that generate biomass
 2. **Expand**: Use biomass to spawn more slimes
@@ -37,12 +45,13 @@ In Dungeon Symbiosis, you control a sentient dungeon that must grow and evolve i
 - [x] Evolution system prototype
 - [x] Basic UI and game loop
 
-### Phase 2: Ecosystem Expansion (Next)
-- [ ] More monster types and evolution paths
-- [ ] Monster synergies and food chains
-- [ ] Dungeon room/habitat system
-- [ ] Monster AI behaviors
-- [ ] Resource conversion mechanics
+### Phase 2: Ecosystem Expansion ✅
+- [x] Extended monster types and evolution paths (10 total monster types)
+- [x] Monster synergies and pack bonuses
+- [x] Habitat system with capacity and bonuses
+- [x] Special abilities (poison aura, minion spawning, crystal armor, etc.)
+- [x] Advanced hero types with special abilities
+- [x] Weighted hero spawning system
 
 ### Phase 3: Advanced Features
 - [ ] Multiple hero classes with unique abilities
@@ -62,11 +71,14 @@ In Dungeon Symbiosis, you control a sentient dungeon that must grow and evolve i
 ```
 Basic Slime (Biomass producer)
 ├── Poison Slime (Mana producer)
-│   ├── Toxic Horror (planned)
-│   └── Venomous Broodmother (planned)
-└── Crystal Slime (Nutrient producer)
-    ├── Gem Guardian (planned)
-    └── Crystal Hive (planned)
+│   ├── Toxic Horror (Advanced mana + poison aura)
+│   └── Venomous Broodmother (Spawns minions)
+├── Crystal Slime (Nutrient producer)  
+│   ├── Gem Guardian (High defense + crystal armor)
+│   └── Crystal Hive (Resource conversion)
+└── Warrior Slime (Combat specialist)
+    ├── Slime Champion (Leadership bonuses)
+    └── Berserker Slime (Rage mechanics)
 ```
 
 ## Resource Types

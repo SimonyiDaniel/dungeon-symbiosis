@@ -203,6 +203,38 @@ section h2 {
 .evolution-options {
     display: flex;
     flex-direction: column;
+    gap: 15px;
+}
+
+.evolution-group {
+    background: rgba(63, 81, 181, 0.05);
+    border: 2px solid #3f51b5;
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 10px;
+}
+
+.evolution-group-header {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #3f51b5;
+}
+
+.evolution-group-title {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: #5c6bc0;
+    margin-bottom: 5px;
+}
+
+.evolution-group-info {
+    font-size: 0.9em;
+    color: #b19cd9;
+}
+
+.evolution-options-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 10px;
 }
 
@@ -210,9 +242,10 @@ section h2 {
     background: rgba(63, 81, 181, 0.1);
     border: 2px solid #3f51b5;
     border-radius: 8px;
-    padding: 15px;
+    padding: 12px;
     cursor: pointer;
     transition: all 0.3s ease;
+    position: relative;
 }
 
 .evolution-option:hover {
@@ -236,18 +269,105 @@ section h2 {
 .evolution-title {
     font-weight: bold;
     color: #5c6bc0;
-    margin-bottom: 5px;
+    margin-bottom: 8px;
+    font-size: 1.05em;
+}
+
+.evolution-stats {
+    font-size: 0.85em;
+    color: #ffcc80;
+    margin-bottom: 6px;
+    font-weight: bold;
+}
+
+.evolution-benefits {
+    font-size: 0.9em;
+    color: #81c784;
+    margin-bottom: 8px;
+    line-height: 1.3;
+    white-space: pre-line;
 }
 
 .evolution-cost {
     font-size: 0.9em;
-    color: #9e9e9e;
+    color: #ff9800;
+    font-weight: bold;
 }
 
 .evolution-available {
     font-size: 0.85em;
     color: #81c784;
     margin-top: 5px;
+}
+
+.habitat-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.habitat {
+    background: rgba(139, 69, 19, 0.2);
+    border: 2px solid #8b4513;
+    border-radius: 8px;
+    padding: 15px;
+    transition: all 0.3s ease;
+}
+
+.habitat.unlocked {
+    border-color: #4caf50;
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.habitat.locked {
+    opacity: 0.6;
+    border-color: #666;
+    background: rgba(85, 85, 85, 0.1);
+}
+
+.habitat-name {
+    font-weight: bold;
+    color: #8b4513;
+    margin-bottom: 5px;
+}
+
+.habitat.unlocked .habitat-name {
+    color: #4caf50;
+}
+
+.habitat-info {
+    font-size: 0.9em;
+    color: #ccc;
+    margin: 5px 0;
+}
+
+.habitat-cost {
+    font-size: 0.85em;
+    color: #ff9800;
+    margin-top: 5px;
+}
+
+.habitat-unlock-btn {
+    background: linear-gradient(45deg, #8b4513, #a0522d);
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    margin-top: 10px;
+    transition: all 0.3s ease;
+}
+
+.habitat-unlock-btn:hover:not(:disabled) {
+    background: linear-gradient(45deg, #a0522d, #8b4513);
+    transform: translateY(-1px);
+}
+
+.habitat-unlock-btn:disabled {
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.6;
 }
 
 @media (max-width: 768px) {
