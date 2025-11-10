@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dungeon Symbiosis</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- Added Google Font for improved typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="game-container">
@@ -13,11 +15,19 @@
             <div class="dungeon-status">
                 <div class="stat">
                     <span class="label">Dungeon Health:</span>
-                    <span id="dungeon-health">100/100 (Level 1)</span>
+                    <!-- Replaced plain text with an accessible visual health bar -->
+                    <div class="health-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
+                        <div class="health-fill" id="dungeon-health-fill" style="width:100%"></div>
+                        <span class="health-text" id="dungeon-health-text">100/100 (Level 1)</span>
+                    </div>
                 </div>
                 <div class="stat">
                     <span class="label">Monster Count:</span>
-                    <span id="monster-count">1</span>
+                    <span id="monster-count">0</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Time:</span>
+                    <span id="game-time">0</span>s
                 </div>
             </div>
         </header>
@@ -78,6 +88,9 @@
                 </div>
             </section>
         </main>
+
+        <!-- Add toast container for short action feedbacks -->
+        <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
     </div>
 
     <script src="game.js"></script>

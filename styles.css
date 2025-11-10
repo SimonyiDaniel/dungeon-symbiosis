@@ -1,10 +1,24 @@
+:root {
+    --bg-1: #0f1724;
+    --bg-2: #111827;
+    --card: #0f1724;
+    --accent: #8bd3c7;
+    --accent-2: #b58cff;
+    --muted: #98a0b3;
+    --danger: #ff6b6b;
+    --success: #4caf50;
+    --glass: rgba(255,255,255,0.04);
+}
+
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;
     padding: 0;
-    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    background: linear-gradient(135deg, var(--bg-1), var(--bg-2));
     color: #e0e0e0;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 .game-container {
@@ -170,27 +184,19 @@ section h2 {
 }
 
 .action-btn {
-    background: linear-gradient(45deg, #8a2be2, #9932cc);
+    background: linear-gradient(45deg, var(--accent), var(--accent-2));
     color: white;
     border: none;
     padding: 12px 20px;
-    border-radius: 6px;
+    border-radius: 10px;
     cursor: pointer;
-    font-weight: bold;
-    transition: all 0.3s ease;
+    font-weight: 700;
+    transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+    box-shadow: 0 8px 24px rgba(11,15,25,.45);
 }
 
-.action-btn:hover:not(:disabled) {
-    background: linear-gradient(45deg, #9932cc, #8a2be2);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(138, 43, 226, 0.3);
-}
-
-.action-btn:disabled {
-    background: #555;
-    cursor: not-allowed;
-    opacity: 0.6;
-}
+.action-btn:active { transform: translateY(1px) scale(.997); }
+.action-btn:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
 
 .hero-status {
     text-align: center;
@@ -390,6 +396,68 @@ section h2 {
     background: #555;
     cursor: not-allowed;
     opacity: 0.6;
+}
+
+/* Health bar styles */
+.health-bar {
+    background: rgba(255,255,255,0.04);
+    border-radius: 12px;
+    height: 22px;
+    width: 260px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 3px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+}
+
+.health-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 9px;
+    transition: width 0.5s ease, filter 0.25s ease;
+    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.12);
+}
+
+.health-text {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #fff;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.5);
+    pointer-events: none;
+}
+
+/* Toast container and messages */
+.toast-container {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 9999;
+}
+
+.toast {
+    background: rgba(15, 23, 36, 0.9);
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+    transition: opacity 220ms ease, transform 220ms ease;
+    max-width: 320px;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
 }
 
 @media (max-width: 768px) {

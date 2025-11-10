@@ -378,21 +378,7 @@ class GameState {
             level: 1
         };
         
-        this.monsters = [
-            {
-                id: 1,
-                type: 'slime',
-                name: 'Basic Slime',
-                health: 20,
-                maxHealth: 20,
-                attack: 3,
-                biomassRate: 0.5,
-                manaRate: 0,
-                nutrientRate: 0,
-                age: 0,
-                evolutionPossible: false
-            }
-        ];
+        this.monsters = [];
         
         this.heroes = [];
         this.invasionTimer = GAME_CONFIG.INVASION_BASE_TIMER;
@@ -435,6 +421,8 @@ class DungeonSymbiosis {
         this.state = new GameState();
         this.lastUpdate = Date.now();
         this.updateInterval = GAME_CONFIG.UPDATE_INTERVAL;
+        this.debug = true; // enable debug logging to diagnose issues
+        this._debugAccum = 0;
         
         this.initializeUI();
         this.startGameLoop();
@@ -468,24 +456,34 @@ class DungeonSymbiosis {
         this.updateMonsters(deltaTime);
         this.updateInvasions(deltaTime);
         this.updateDisplay();
+
+        // Debug logging once per second if enabled
+        if (this.debug) {
+            this._debugAccum += deltaTime;
+            if (this._debugAccum >= 1) {
+                this._debugAccum = 0;
+                const r = this.state.resourceManager.getAll();
+                console.log(`DEBUG: dt=${deltaTime.toFixed(3)}s gameTime=${this.state.gameTime.toFixed(1)} biomass=${(r.biomass||0).toFixed(2)} monsters=${this.state.monsters.length}`);
+                if (this.state.monsters.length > 0) {
+                    const slime = this.state.monsters[0];
+                    console.log(`First monster: ${slime.name} biomassRate=${slime.biomassRate} age=${slime.age.toFixed(1)}`);
+                }
+            }
+        }
     }
     
     updateMonsters(deltaTime) {
-        // Calculate global slime bonus (all slimes provide +0.5 biomass/s total)
-        const slimeCount = this.state.monsters.filter(monster => 
-            monster.type === 'slime' || monster.name.includes('Slime')
-        ).length;
-        const globalSlimeBonus = slimeCount * 0.5;
-        
-        // Add global slime biomass bonus
-        if (globalSlimeBonus > 0) {
-            this.state.resourceManager.add({ biomass: globalSlimeBonus * deltaTime });
+        if (this.debug && this.state.monsters.length > 0) {
+            const r = this.state.resourceManager.getAll();
+            console.log(`updateMonsters dt=${deltaTime.toFixed(3)}s monsters=${this.state.monsters.length} biomass=${(r.biomass||0).toFixed(3)}`);
         }
         
         this.state.monsters.forEach(monster => {
             monster.age += deltaTime;
-            
+
             const monsterType = this.state.monsterTypes[monster.type];
+            if (!monsterType) return; // Skip if monster type not found
+            
             const synergyBonus = this.calculateSynergyBonus(monster);
             const dungeonBonus = 1 + (this.state.dungeon.level - 1) * GAME_CONFIG.DUNGEON_LEVEL_BONUS;
             
@@ -494,16 +492,16 @@ class DungeonSymbiosis {
                 specialBonus *= this.state.crystalBonus;
             }
             
-            // Generate resources
+            // Generate resources - use individual monster rates (not global slime bonus)
             const resourceRates = {
-                biomass: (monster.biomassRate !== undefined ? monster.biomassRate : monsterType.biomassRate) || 0,
-                mana: (monster.manaRate !== undefined ? monster.manaRate : monsterType.manaRate) || 0,
-                nutrients: (monster.nutrientRate !== undefined ? monster.nutrientRate : monsterType.nutrientRate) || 0
+                biomass: monster.biomassRate || monsterType.biomassRate || 0,
+                mana: monster.manaRate || monsterType.manaRate || 0,
+                nutrients: monster.nutrientRate || monsterType.nutrientRate || 0
             };
             
             Object.entries(resourceRates).forEach(([resource, rate]) => {
                 if (rate > 0) {
-                    const finalRate = rate * synergyBonus[resource] * dungeonBonus * specialBonus;
+                    const finalRate = rate * (synergyBonus[resource] || 1) * dungeonBonus * specialBonus;
                     this.state.resourceManager.add({ [resource]: finalRate * deltaTime });
                 }
             });
@@ -566,6 +564,8 @@ class DungeonSymbiosis {
             isMinion: true
         };
         this.state.monsters.push(newMonster);
+        // Immediately refresh display so players see new monster and its impact
+        this.updateDisplay();
     }
 
     updateInvasions(deltaTime) {
@@ -589,7 +589,10 @@ class DungeonSymbiosis {
             cost = monsterType.cost;
         }
         
-        if (!this.state.resourceManager.canAfford(cost)) return false;
+        if (!this.state.resourceManager.canAfford(cost)) {
+            this.showToast('Not enough resources to spawn.', 2500);
+            return false;
+        }
         
         this.state.resourceManager.deduct(cost);
         
@@ -614,6 +617,13 @@ class DungeonSymbiosis {
         
         this.state.monsters.push(newMonster);
         this.logMessage(`Spawned ${newMonster.name}!`);
+        this.showToast(`Spawned ${newMonster.name}!`);
+        // Immediately update UI to reflect new monster and cost change
+        this.updateDisplay();
+        if (this.debug) {
+            const r = this.state.resourceManager.getAll();
+            console.log(`spawnMonster: bought ${type}. biomass=${(r.biomass||0).toFixed(3)} monsters=${this.state.monsters.length}`);
+        }
         return true;
     }
     
@@ -767,7 +777,10 @@ class DungeonSymbiosis {
     upgradeDungeon() {
         const cost = this.getDungeonUpgradeCost();
         
-        if (!this.state.resourceManager.canAfford(cost)) return;
+        if (!this.state.resourceManager.canAfford(cost)) {
+            this.showToast('Not enough Nutrients to upgrade dungeon.', 2500);
+            return;
+        }
         
         this.state.resourceManager.deduct(cost);
         this.state.dungeon.level++;
@@ -775,7 +788,7 @@ class DungeonSymbiosis {
         this.state.dungeon.health = this.state.dungeon.maxHealth;
         
         const benefits = this.getDungeonUpgradeBenefits();
-        let upgradeMessage = `Dungeon upgraded to level ${this.state.dungeon.level}! Max health: ${this.state.dungeon.maxHealth}. Resource generation: +${benefits.currentResourceBonus}% (total).`;
+        let upgradeMessage = `Dungeon upgraded to level ${this.state.dungeon.level}! Max health: ${this.state.dungeon.maxHealth}.`;
         
         if (this.state.dungeon.level % 5 === 0) {
             const specialBonus = this.applyMajorUpgrade(this.state.dungeon.level);
@@ -783,6 +796,7 @@ class DungeonSymbiosis {
         }
         
         this.logMessage(upgradeMessage);
+        this.showToast('Dungeon upgraded!');
     }
 
     applyMajorUpgrade(level) {
@@ -888,31 +902,64 @@ class DungeonSymbiosis {
     updateDisplay() {
         const dungeonBonus = Math.round((this.state.dungeon.level - 1) * 5);
         const bonusText = dungeonBonus > 0 ? ` (+${dungeonBonus}%)` : '';
-        
+
         const resources = this.state.resourceManager.getAll();
-        document.getElementById('biomass').textContent = Math.floor(resources.biomass);
-        document.getElementById('mana').textContent = Math.floor(resources.mana);
-        document.getElementById('nutrients').textContent = Math.floor(resources.nutrients);
-        
-        document.getElementById('dungeon-health').textContent = 
-            `${Math.max(0, Math.floor(this.state.dungeon.health))}/${this.state.dungeon.maxHealth} (Level ${this.state.dungeon.level}${bonusText})`;
-        document.getElementById('monster-count').textContent = this.state.monsters.length;
-        document.getElementById('invasion-timer').textContent = Math.ceil(this.state.invasionTimer);
-        
+        const biomassEl = document.getElementById('biomass');
+        const manaEl = document.getElementById('mana');
+        const nutrientsEl = document.getElementById('nutrients');
+        if (biomassEl) biomassEl.textContent = Math.max(0, Math.floor(resources.biomass || 0));
+        if (manaEl) manaEl.textContent = Math.max(0, Math.floor(resources.mana || 0));
+        if (nutrientsEl) nutrientsEl.textContent = Math.max(0, Math.floor(resources.nutrients || 0));
+
+        // Update visual health bar and text
+        const healthPercent = Math.max(0, Math.min(100, Math.floor((this.state.dungeon.health / this.state.dungeon.maxHealth) * 100)));
+        const healthFill = document.getElementById('dungeon-health-fill');
+        const healthText = document.getElementById('dungeon-health-text');
+        const healthBar = document.querySelector('.health-bar');
+
+        if (healthFill) {
+            healthFill.style.width = `${healthPercent}%`;
+            healthFill.style.filter = healthPercent < 30 ? 'brightness(.9) saturate(.9)' : '';
+
+            // change color: green > yellow > red
+            if (healthPercent > 60) {
+                healthFill.style.background = 'linear-gradient(90deg, #4caf50, #8bd3c7)';
+            } else if (healthPercent > 30) {
+                healthFill.style.background = 'linear-gradient(90deg, #ffb74d, #ff9800)';
+            } else {
+                healthFill.style.background = 'linear-gradient(90deg, #ff6b6b, #ff3b30)';
+            }
+        }
+
+        if (healthText) {
+            healthText.textContent = `${Math.max(0, Math.floor(this.state.dungeon.health))}/${this.state.dungeon.maxHealth} (Level ${this.state.dungeon.level}${bonusText})`;
+        }
+
+        if (healthBar) {
+            // Update ARIA value for assistive tech
+            try { healthBar.setAttribute('aria-valuenow', String(healthPercent)); } catch (e) {}
+        }
+
+        const monsterCountEl = document.getElementById('monster-count');
+        if (monsterCountEl) monsterCountEl.textContent = this.state.monsters.length;
+        const invasionTimerEl = document.getElementById('invasion-timer');
+        if (invasionTimerEl) invasionTimerEl.textContent = Math.ceil(this.state.invasionTimer);
+
+        // Update game time display
+        const gameTimeEl = document.getElementById('game-time');
+        if (gameTimeEl) gameTimeEl.textContent = Math.floor(this.state.gameTime || 0);
+
         this.updateMonsterList();
         this.updateButtonStates();
         this.updateHabitatList();
         this.updateEvolutionOptions();
     }
-    
+
     updateMonsterList() {
         const monsterList = document.getElementById('monster-list');
         
         if (this.state.monsters.length === 0) {
-            const emptyMessage = '<p style="color: #888; text-align: center; margin: 20px;">No monsters in your dungeon. Spawn some to begin!</p>';
-            if (monsterList.innerHTML !== emptyMessage) {
-                monsterList.innerHTML = emptyMessage;
-            }
+            monsterList.innerHTML = '<p style="color: #888; text-align: center; margin: 20px;">No monsters in your dungeon. Spawn some to begin!</p>';
             return;
         }
         
@@ -933,56 +980,31 @@ class DungeonSymbiosis {
             }
         });
         
-        // Create new monster display data
-        const newMonsterData = [];
+        // Clear and rebuild monster list
+        monsterList.innerHTML = '';
+        
         Object.keys(monsterGroups).forEach(monsterType => {
             const group = monsterGroups[monsterType];
             const sampleMonster = group.monsters[0];
             const monsterTypeData = this.state.monsterTypes[monsterType];
             const avgAge = group.monsters.reduce((sum, m) => sum + m.age, 0) / group.count;
             
-            newMonsterData.push({
-                type: monsterType,
-                name: sampleMonster.name,
-                count: group.count,
-                health: sampleMonster.health,
-                maxHealth: sampleMonster.maxHealth,
-                attack: sampleMonster.attack,
-                avgAge: Math.floor(avgAge),
-                evolutionReady: group.evolutionReady,
-                biomassRate: monsterTypeData.biomassRate ? (monsterTypeData.biomassRate * group.count).toFixed(1) : null,
-                manaRate: monsterTypeData.manaRate ? (monsterTypeData.manaRate * group.count).toFixed(1) : null,
-                nutrientRate: monsterTypeData.nutrientRate ? (monsterTypeData.nutrientRate * group.count).toFixed(1) : null
-            });
-        });
-        
-        // Only update if the content has actually changed
-        const currentData = JSON.stringify(newMonsterData);
-        if (this.lastMonsterData === currentData) {
-            return; // No changes needed
-        }
-        this.lastMonsterData = currentData;
-        
-        // Rebuild the monster list
-        monsterList.innerHTML = '';
-        
-        newMonsterData.forEach(data => {
             const monsterDiv = document.createElement('div');
             monsterDiv.className = 'monster';
             
             let productionText = '';
-            if (data.biomassRate) productionText += `+${data.biomassRate}/s Biomass`;
-            if (data.manaRate) productionText += ` +${data.manaRate}/s Mana`;
-            if (data.nutrientRate) productionText += ` +${data.nutrientRate}/s Nutrients`;
+            if (monsterTypeData && monsterTypeData.biomassRate) productionText += `+${(monsterTypeData.biomassRate * group.count).toFixed(1)}/s Biomass`;
+            if (monsterTypeData && monsterTypeData.manaRate) productionText += ` +${(monsterTypeData.manaRate * group.count).toFixed(1)}/s Mana`;
+            if (monsterTypeData && monsterTypeData.nutrientRate) productionText += ` +${(monsterTypeData.nutrientRate * group.count).toFixed(1)}/s Nutrients`;
             
             monsterDiv.innerHTML = `
                 <div class="monster-info">
-                    <div class="monster-name">${data.name} x${data.count}</div>
+                    <div class="monster-name">${sampleMonster.name} x${group.count}</div>
                     <div class="monster-stats">
-                        HP: ${data.health}/${data.maxHealth} | 
-                        ATK: ${data.attack} | 
-                        Avg Age: ${data.avgAge}s
-                        ${data.evolutionReady > 0 ? ` | <span style="color: #4caf50;">${data.evolutionReady} Evolution Ready!</span>` : ''}
+                        HP: ${sampleMonster.health}/${sampleMonster.maxHealth} | 
+                        ATK: ${sampleMonster.attack} | 
+                        Avg Age: ${Math.floor(avgAge)}s
+                        ${group.evolutionReady > 0 ? ` | <span style="color: #4caf50;">${group.evolutionReady} Evolution Ready!</span>` : ''}
                     </div>
                     <div class="monster-production">
                         ${productionText}
@@ -992,6 +1014,39 @@ class DungeonSymbiosis {
             
             monsterList.appendChild(monsterDiv);
         });
+    }
+
+    // Toast helper for short user feedback
+    showToast(message, duration = 3000) {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+        container.appendChild(toast);
+        // Force reflow then show
+        requestAnimationFrame(() => toast.classList.add('show'));
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => { try { container.removeChild(toast); } catch(e){} }, 220);
+        }, duration);
+    }
+
+    unlockHabitat(habitatKey) {
+        const habitat = this.state.habitats[habitatKey];
+        
+        if (!habitat || habitat.unlocked || !this.state.resourceManager.canAfford(habitat.cost)) {
+            this.showToast('Cannot unlock habitat.', 2200);
+            return;
+        }
+        
+        this.state.resourceManager.deduct(habitat.cost);
+        habitat.unlocked = true;
+        
+        this.logMessage(`Unlocked ${habitat.name}!`);
+        this.showToast(`Unlocked ${habitat.name}!`);
+        // Refresh display immediately
+        this.updateDisplay();
     }
     
     updateButtonStates() {
@@ -1112,12 +1167,18 @@ class DungeonSymbiosis {
     unlockHabitat(habitatKey) {
         const habitat = this.state.habitats[habitatKey];
         
-        if (!habitat || habitat.unlocked || !this.state.resourceManager.canAfford(habitat.cost)) return;
+        if (!habitat || habitat.unlocked || !this.state.resourceManager.canAfford(habitat.cost)) {
+            this.showToast('Cannot unlock habitat.', 2200);
+            return;
+        }
         
         this.state.resourceManager.deduct(habitat.cost);
         habitat.unlocked = true;
         
         this.logMessage(`Unlocked ${habitat.name}!`);
+        this.showToast(`Unlocked ${habitat.name}!`);
+        // Refresh display immediately
+        this.updateDisplay();
     }
     
     updateEvolutionOptions() {
@@ -1147,111 +1208,110 @@ class DungeonSymbiosis {
         Object.keys(monsterGroups).forEach(monsterType => {
             const group = monsterGroups[monsterType];
             const monsterTypeData = this.state.monsterTypes[monsterType];
+            const avgAge = group.monsters.reduce((sum, m) => sum + m.age, 0) / group.count;
             
-            if (monsterTypeData.evolvesTo && monsterTypeData.evolvesTo.length > 0) {
-                newEvolutionData[monsterType] = {
-                    groupInfo: {
-                        name: group.monsters[0].name,
-                        total: group.total,
-                        evolutionReady: group.evolutionReady
-                    },
-                    evolutions: []
-                };
+            newEvolutionData[monsterType] = {
+                groupInfo: {
+                    name: group.monsters[0].name,
+                    total: group.total,
+                    evolutionReady: group.evolutionReady
+                },
+                evolutions: []
+            };
+            
+            monsterTypeData.evolvesTo.forEach(evolutionType => {
+                const evolutionMonsterType = this.state.monsterTypes[evolutionType];
+                const canAfford = this.state.resourceManager.canAfford(evolutionMonsterType.cost);
+                const hasEvolvableMonsters = group.evolutionReady > 0;
                 
-                monsterTypeData.evolvesTo.forEach(evolutionType => {
-                    const evolutionMonsterType = this.state.monsterTypes[evolutionType];
-                    const canAfford = this.state.resourceManager.canAfford(evolutionMonsterType.cost);
-                    const hasEvolvableMonsters = group.evolutionReady > 0;
-                    
-                    // Check if this is a fusion evolution
-                    let isFusion = false;
-                    let hasFusionRequirements = false;
-                    let fusionRequirementsText = '';
-                    
-                    if (evolutionMonsterType.fusionRequirements) {
-                        isFusion = true;
-                        const fusion = EvolutionManager.checkFusionRequirements(
-                            evolutionType, 
-                            this.state.monsters, 
-                            this.state.monsterTypes
-                        );
-                        hasFusionRequirements = fusion.possible;
-                        fusionRequirementsText = fusion.requirementsText;
-                    }
-                    
-                    // Determine the state of the evolution option
-                    let stateClass = '';
-                    let stateText = '';
-                    
-                    if (isFusion) {
-                        if (!hasFusionRequirements && !canAfford) {
-                            stateClass = 'disabled';
-                            stateText = ' (Need both slimes & resources)';
-                        } else if (!hasFusionRequirements) {
-                            stateClass = 'disabled';
-                            stateText = ' (Need both slimes ready)';
-                        } else if (!canAfford) {
-                            stateClass = 'disabled';
-                            stateText = ' (Need resources)';
-                        } else {
-                            stateText = ' (Ready to fuse!)';
-                        }
+                // Check if this is a fusion evolution
+                let isFusion = false;
+                let hasFusionRequirements = false;
+                let fusionRequirementsText = '';
+                
+                if (evolutionMonsterType.fusionRequirements) {
+                    isFusion = true;
+                    const fusion = EvolutionManager.checkFusionRequirements(
+                        evolutionType, 
+                        this.state.monsters, 
+                        this.state.monsterTypes
+                    );
+                    hasFusionRequirements = fusion.possible;
+                    fusionRequirementsText = fusion.requirementsText;
+                }
+                
+                // Determine the state of the evolution option
+                let stateClass = '';
+                let stateText = '';
+                
+                if (isFusion) {
+                    if (!hasFusionRequirements && !canAfford) {
+                        stateClass = 'disabled';
+                        stateText = ' (Need both slimes & resources)';
+                    } else if (!hasFusionRequirements) {
+                        stateClass = 'disabled';
+                        stateText = ' (Need both slimes ready)';
+                    } else if (!canAfford) {
+                        stateClass = 'disabled';
+                        stateText = ' (Need resources)';
                     } else {
-                        if (!hasEvolvableMonsters && !canAfford) {
-                            stateClass = 'disabled';
-                            stateText = ' (Need age & resources)';
-                        } else if (!hasEvolvableMonsters) {
-                            stateClass = 'disabled';
-                            stateText = ' (Need 30+ age)';
-                        } else if (!canAfford) {
-                            stateClass = 'disabled';
-                            stateText = ' (Need resources)';
-                        } else {
-                            stateText = ` (${group.evolutionReady} ready)`;
-                        }
+                        stateText = ' (Ready to fuse!)';
                     }
-                    
-                    const costText = Object.keys(evolutionMonsterType.cost)
-                        .map(resource => `${evolutionMonsterType.cost[resource]} ${resource}`)
-                        .join(', ');
-                    
-                    // Create benefits text
-                    let benefitsText = [];
-                    if (evolutionMonsterType.biomassRate) benefitsText.push(`${evolutionMonsterType.biomassRate}/s Biomass`);
-                    if (evolutionMonsterType.manaRate) benefitsText.push(`${evolutionMonsterType.manaRate}/s Mana`);
-                    if (evolutionMonsterType.nutrientRate) benefitsText.push(`${evolutionMonsterType.nutrientRate}/s Nutrients`);
-                    
-                    let specialText = '';
-                    if (evolutionMonsterType.special) {
-                        specialText = EvolutionManager.getSpecialAbilityText(evolutionMonsterType.special);
+                } else {
+                    if (!hasEvolvableMonsters && !canAfford) {
+                        stateClass = 'disabled';
+                        stateText = ' (Need age & resources)';
+                    } else if (!hasEvolvableMonsters) {
+                        stateClass = 'disabled';
+                        stateText = ' (Need 30+ age)';
+                    } else if (!canAfford) {
+                        stateClass = 'disabled';
+                        stateText = ' (Need resources)';
+                    } else {
+                        stateText = ` (${group.evolutionReady} ready)`;
                     }
-                    
-                    let benefitsDisplay = '';
-                    if (benefitsText.length > 0) {
-                        benefitsDisplay = `Produces: ${benefitsText.join(', ')}`;
-                    }
-                    if (specialText) {
-                        benefitsDisplay += (benefitsDisplay ? '\n' : '') + specialText;
-                    }
-                    if (fusionRequirementsText) {
-                        benefitsDisplay = fusionRequirementsText + '\n' + benefitsDisplay;
-                    }
-                    
-                    newEvolutionData[monsterType].evolutions.push({
-                        id: `${monsterType}_to_${evolutionType}`,
-                        evolutionType,
-                        title: `→ ${evolutionMonsterType.name}${stateText}`,
-                        cost: `Cost: ${costText}`,
-                        benefits: benefitsDisplay,
-                        stats: `HP: ${evolutionMonsterType.health} | ATK: ${evolutionMonsterType.attack}`,
-                        stateClass,
-                        canAfford,
-                        hasEvolvableMonsters: isFusion ? hasFusionRequirements : hasEvolvableMonsters,
-                        isFusion,
-                        fusionRequirements: evolutionMonsterType.fusionRequirements
-                    });
+                }
+                
+                const costText = Object.keys(evolutionMonsterType.cost)
+                    .map(resource => `${evolutionMonsterType.cost[resource]} ${resource}`)
+                    .join(', ');
+                
+                // Create benefits text
+                let benefitsText = [];
+                if (evolutionMonsterType.biomassRate) benefitsText.push(`${evolutionMonsterType.biomassRate}/s Biomass`);
+                if (evolutionMonsterType.manaRate) benefitsText.push(`${evolutionMonsterType.manaRate}/s Mana`);
+                if (evolutionMonsterType.nutrientRate) benefitsText.push(`${evolutionMonsterType.nutrientRate}/s Nutrients`);
+                
+                let specialText = '';
+                if (evolutionMonsterType.special) {
+                    specialText = EvolutionManager.getSpecialAbilityText(evolutionMonsterType.special);
+                }
+                
+                let benefitsDisplay = '';
+                if (benefitsText.length > 0) {
+                    benefitsDisplay = `Produces: ${benefitsText.join(', ')}`;
+                }
+                if (specialText) {
+                    benefitsDisplay += (benefitsDisplay ? '\n' : '') + specialText;
+                }
+                if (fusionRequirementsText) {
+                    benefitsDisplay = fusionRequirementsText + '\n' + benefitsDisplay;
+                }
+                
+                newEvolutionData[monsterType].evolutions.push({
+                    id: `${monsterType}_to_${evolutionType}`,
+                    evolutionType,
+                    title: `→ ${evolutionMonsterType.name}${stateText}`,
+                    cost: `Cost: ${costText}`,
+                    benefits: benefitsDisplay,
+                    stats: `HP: ${evolutionMonsterType.health} | ATK: ${evolutionMonsterType.attack}`,
+                    stateClass,
+                    canAfford,
+                    hasEvolvableMonsters: isFusion ? hasFusionRequirements : hasEvolvableMonsters,
+                    isFusion,
+                    fusionRequirements: evolutionMonsterType.fusionRequirements
                 });
-            }
+            });
         });
         
         // Only update if the content has actually changed
