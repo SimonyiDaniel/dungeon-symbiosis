@@ -5,7 +5,33 @@ const GAME_CONFIG = {
     DUNGEON_LEVEL_BONUS: 0.05,
     INVASION_BASE_TIMER: 60,
     INVASION_RANDOM_RANGE: 60,
-    LOG_MESSAGE_LIMIT: 10
+    LOG_MESSAGE_LIMIT: 10,
+    BOSS_INVASION_INTERVAL: 300, // 5 minutes
+    PRESTIGE_UNLOCK_LEVEL: 10
+};
+
+const PRESTIGE_BONUSES = {
+    resource_generation: { name: 'Resource Mastery', description: '+10% all resource generation per level', cost: 1 },
+    monster_health: { name: 'Vitality Enhancement', description: '+15% monster health per level', cost: 1 },
+    monster_attack: { name: 'Combat Training', description: '+12% monster attack per level', cost: 1 },
+    evolution_speed: { name: 'Accelerated Growth', description: '-5 seconds evolution time per level', cost: 2 },
+    starting_resources: { name: 'Resource Cache', description: 'Start with +50% resources per level', cost: 2 },
+    dungeon_resilience: { name: 'Core Fortification', description: '+20% dungeon health per level', cost: 2 },
+    synergy_boost: { name: 'Symbiotic Bond', description: '+5% synergy effectiveness per level', cost: 3 },
+    hero_rewards: { name: 'Treasure Hunter', description: '+25% loot from heroes per level', cost: 3 }
+};
+
+const ACHIEVEMENTS = {
+    first_evolution: { name: 'First Evolution', description: 'Evolve your first monster', icon: '🧬', reward: 1 },
+    monster_collector: { name: 'Monster Collector', description: 'Have 10 monsters at once', icon: '👾', reward: 1 },
+    ecosystem_master: { name: 'Ecosystem Master', description: 'Unlock all habitats', icon: '🏰', reward: 2 },
+    slayer: { name: 'Hero Slayer', description: 'Defeat 10 heroes', icon: '⚔️', reward: 1 },
+    boss_killer: { name: 'Boss Killer', description: 'Defeat your first boss', icon: '👑', reward: 3 },
+    evolution_master: { name: 'Evolution Master', description: 'Have all 10 monster types', icon: '🌟', reward: 3 },
+    prestige_initiate: { name: 'Prestige Initiate', description: 'Complete your first prestige', icon: '♻️', reward: 5 },
+    survivor: { name: 'Survivor', description: 'Survive 100 invasions', icon: '🛡️', reward: 2 },
+    synergy_expert: { name: 'Synergy Expert', description: 'Get a 200% synergy bonus', icon: '🔗', reward: 2 },
+    resource_baron: { name: 'Resource Baron', description: 'Accumulate 1000 of each resource', icon: '💎', reward: 2 }
 };
 
 const MAJOR_UPGRADES = {
@@ -365,6 +391,61 @@ class DataTemplates {
             battlegrounds: { name: 'Battle Arena', unlocked: false, capacity: 8, bonus: { attack: 1.4 }, cost: { biomass: 70, mana: 30, nutrients: 10 } }
         };
     }
+    
+    static getEquipmentTypes() {
+        return {
+            common: {
+                core_crystal: { name: 'Cracked Core Crystal', bonus: { dungeonHealth: 1.15 }, rarity: 'Common', dropChance: 0.3 },
+                mana_conduit: { name: 'Rusty Mana Conduit', bonus: { manaRate: 1.10 }, rarity: 'Common', dropChance: 0.3 },
+                bio_reactor: { name: 'Simple Bio-Reactor', bonus: { biomassRate: 1.10 }, rarity: 'Common', dropChance: 0.3 },
+                nutrient_filter: { name: 'Basic Nutrient Filter', bonus: { nutrientRate: 1.10 }, rarity: 'Common', dropChance: 0.3 }
+            },
+            rare: {
+                core_crystal: { name: 'Polished Core Crystal', bonus: { dungeonHealth: 1.30 }, rarity: 'Rare', dropChance: 0.15 },
+                mana_conduit: { name: 'Enchanted Mana Conduit', bonus: { manaRate: 1.25 }, rarity: 'Rare', dropChance: 0.15 },
+                bio_reactor: { name: 'Advanced Bio-Reactor', bonus: { biomassRate: 1.25 }, rarity: 'Rare', dropChance: 0.15 },
+                nutrient_filter: { name: 'Refined Nutrient Filter', bonus: { nutrientRate: 1.25 }, rarity: 'Rare', dropChance: 0.15 }
+            },
+            epic: {
+                core_crystal: { name: 'Radiant Core Crystal', bonus: { dungeonHealth: 1.50 }, rarity: 'Epic', dropChance: 0.05 },
+                mana_conduit: { name: 'Arcane Mana Conduit', bonus: { manaRate: 1.50 }, rarity: 'Epic', dropChance: 0.05 },
+                bio_reactor: { name: 'Quantum Bio-Reactor', bonus: { biomassRate: 1.50 }, rarity: 'Epic', dropChance: 0.05 },
+                nutrient_filter: { name: 'Perfect Nutrient Filter', bonus: { nutrientRate: 1.50 }, rarity: 'Epic', dropChance: 0.05 }
+            }
+        };
+    }
+    
+    static getBossTypes() {
+        return [
+            {
+                name: 'Champion Knight',
+                health: 200,
+                attack: 30,
+                loot: { biomass: 50, mana: 30, nutrients: 20 },
+                special: 'shield_bash',
+                description: 'A seasoned warrior with impenetrable defense',
+                equipmentDrop: true
+            },
+            {
+                name: 'Arch Mage',
+                health: 150,
+                attack: 40,
+                loot: { biomass: 30, mana: 60, nutrients: 30 },
+                special: 'mana_explosion',
+                description: 'Master of destructive magic',
+                equipmentDrop: true
+            },
+            {
+                name: 'Dungeon Purifier',
+                health: 250,
+                attack: 35,
+                loot: { biomass: 60, mana: 40, nutrients: 40 },
+                special: 'purge',
+                description: 'Elite specialist trained to cleanse dungeons',
+                equipmentDrop: true
+            }
+        ];
+    }
 }
 
 // Game State
@@ -383,6 +464,7 @@ class GameState {
         this.heroes = [];
         this.invasionTimer = GAME_CONFIG.INVASION_BASE_TIMER;
         this.gameTime = 0;
+        this.bossTimer = GAME_CONFIG.BOSS_INVASION_INTERVAL;
         
         this.monsterTypes = DataTemplates.getMonsterTypes();
         this.heroTypes = DataTemplates.getHeroTypes();
@@ -397,6 +479,48 @@ class GameState {
         this.combatBonus = 1.0;
         this.toxicBonus = 1.0;
         this.synergyBonus = 0.1;
+        
+        // Prestige System
+        this.prestige = {
+            level: 0,
+            currency: 0, // Essence earned from prestiging
+            bonuses: {
+                resource_generation: 0,
+                monster_health: 0,
+                monster_attack: 0,
+                evolution_speed: 0,
+                starting_resources: 0,
+                dungeon_resilience: 0,
+                synergy_boost: 0,
+                hero_rewards: 0
+            }
+        };
+        
+        // Achievement System
+        this.achievements = {
+            unlocked: {},
+            stats: {
+                totalEvolutions: 0,
+                heroesDefeated: 0,
+                bossesDefeated: 0,
+                invasionsSurvived: 0,
+                totalPrestiges: 0,
+                maxMonsters: 0,
+                maxSynergyBonus: 0,
+                habitatsUnlocked: 0,
+                uniqueMonsterTypes: new Set()
+            }
+        };
+        
+        // Equipment/Loot System
+        this.equipment = {
+            core_crystal: null, // Boosts dungeon health
+            mana_conduit: null, // Boosts mana generation
+            bio_reactor: null, // Boosts biomass generation
+            nutrient_filter: null // Boosts nutrient generation
+        };
+        
+        this.availableLoot = [];
     }
 
     getSlimeCost() {
@@ -435,6 +559,22 @@ class DungeonSymbiosis {
         
         document.getElementById('upgrade-dungeon').addEventListener('click', () => {
             this.upgradeDungeon();
+        });
+        
+        // Achievement modal controls
+        document.getElementById('open-achievements').addEventListener('click', () => {
+            document.getElementById('achievement-modal').classList.add('show');
+        });
+        
+        document.getElementById('close-achievements').addEventListener('click', () => {
+            document.getElementById('achievement-modal').classList.remove('show');
+        });
+        
+        // Close modal when clicking outside
+        document.getElementById('achievement-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'achievement-modal') {
+                document.getElementById('achievement-modal').classList.remove('show');
+            }
         });
         
         this.updateDisplay();
@@ -492,7 +632,17 @@ class DungeonSymbiosis {
                 specialBonus *= this.state.crystalBonus;
             }
             
+
             // Generate resources - use individual monster rates (not global slime bonus)
+
+            // Apply prestige bonuses
+            const prestigeBonus = 1 + (this.state.prestige.bonuses.resource_generation * 0.2);
+            
+            // Apply equipment bonuses
+            const equipmentBonus = this.getEquipmentBonus('resource_rate');
+            
+            // Generate resources
+
             const resourceRates = {
                 biomass: monster.biomassRate || monsterType.biomassRate || 0,
                 mana: monster.manaRate || monsterType.manaRate || 0,
@@ -501,12 +651,15 @@ class DungeonSymbiosis {
             
             Object.entries(resourceRates).forEach(([resource, rate]) => {
                 if (rate > 0) {
-                    const finalRate = rate * (synergyBonus[resource] || 1) * dungeonBonus * specialBonus;
+                    const finalRate = rate * synergyBonus[resource] * dungeonBonus * specialBonus * prestigeBonus * equipmentBonus;
                     this.state.resourceManager.add({ [resource]: finalRate * deltaTime });
                 }
             });
             
             SpecialAbilitiesManager.processAbility(monster, deltaTime, this);
+            
+            const evolutionSpeedBonus = 1 + (this.state.prestige.bonuses.evolution_speed * 0.15);
+            monster.age += deltaTime * evolutionSpeedBonus;
             
             if (monster.age > GAME_CONFIG.EVOLUTION_AGE_THRESHOLD && monsterType.evolvesTo && !monster.evolutionPossible) {
                 monster.evolutionPossible = true;
@@ -574,6 +727,13 @@ class DungeonSymbiosis {
         if (this.state.invasionTimer <= 0) {
             this.spawnHero();
             this.state.invasionTimer = GAME_CONFIG.INVASION_BASE_TIMER + Math.random() * GAME_CONFIG.INVASION_RANDOM_RANGE;
+        }
+        
+        // Boss invasion system
+        this.state.bossTimer -= deltaTime;
+        if (this.state.bossTimer <= 0) {
+            this.spawnBoss();
+            this.state.bossTimer = GAME_CONFIG.BOSS_INVASION_INTERVAL;
         }
     }
 
@@ -701,14 +861,20 @@ class DungeonSymbiosis {
         }
         
         this.state.heroes = this.state.heroes.filter(h => h.id !== hero.id);
+        this.state.achievements.stats.invasionsSurvived++;
+        this.checkAchievements();
     }
 
     handleMonsterCombat(hero) {
         let totalMonsterAttack = 0;
         
+        // Apply prestige bonuses
+        const attackBonus = 1 + (this.state.prestige.bonuses.monster_attack * 0.15);
+        const synergyBonus = 1 + (this.state.prestige.bonuses.synergy_boost * 0.05);
+        
         this.state.monsters.forEach(monster => {
-            const synergyBonus = this.calculateSynergyBonus(monster);
-            let attack = monster.attack * synergyBonus.attack;
+            const monsterSynergy = this.calculateSynergyBonus(monster);
+            let attack = monster.attack * monsterSynergy.attack * attackBonus * synergyBonus;
             
             if (this.state.combatBonus) {
                 attack *= this.state.combatBonus;
@@ -737,12 +903,26 @@ class DungeonSymbiosis {
         
         if (totalMonsterAttack >= hero.health) {
             this.logMessage(`Your monsters defeat ${hero.name}! Gained resources.`);
-            this.state.resourceManager.add(hero.loot);
             
-            if (hero.special === 'boss') {
-                this.state.resourceManager.add({ biomass: 10, mana: 10, nutrients: 10 });
-                this.logMessage('Bonus resources for defeating a boss!');
+            // Apply hero reward prestige bonus
+            const lootMultiplier = 1 + (this.state.prestige.bonuses.hero_rewards * 0.25);
+            const loot = {};
+            Object.keys(hero.loot).forEach(resource => {
+                loot[resource] = Math.floor(hero.loot[resource] * lootMultiplier);
+            });
+            this.state.resourceManager.add(loot);
+            
+            // Track achievements
+            if (hero.isBoss) {
+                this.state.achievements.stats.bossesDefeated++;
+                this.logMessage('💀 BOSS DEFEATED! Extra rewards!');
+                this.state.resourceManager.add({ biomass: 15, mana: 15, nutrients: 15 });
+                this.dropLoot(hero);
+            } else {
+                this.state.achievements.stats.heroesDefeated++;
             }
+            
+            this.checkAchievements();
         } else {
             this.damageMonsters(hero);
         }
@@ -864,6 +1044,11 @@ class DungeonSymbiosis {
             age: 0
         });
         
+        // Track achievements
+        this.state.achievements.stats.totalEvolutions++;
+        this.state.achievements.stats.uniqueMonsterTypes.add(newType);
+        this.checkAchievements();
+        
         this.logMessage(`Monster evolved into ${monster.name}!`);
     }
 
@@ -953,6 +1138,9 @@ class DungeonSymbiosis {
         this.updateButtonStates();
         this.updateHabitatList();
         this.updateEvolutionOptions();
+        this.updatePrestigeDisplay();
+        this.updateAchievementDisplay();
+        this.updateEquipmentDisplay();
     }
 
     updateMonsterList() {
@@ -1427,6 +1615,353 @@ class DungeonSymbiosis {
         }
         
         this.updateEvolutionOptions();
+    }
+    
+    // ===== PRESTIGE SYSTEM =====
+    canPrestige() {
+        return this.state.dungeon.level >= GAME_CONFIG.PRESTIGE_UNLOCK_LEVEL;
+    }
+    
+    calculatePrestigeReward() {
+        // Award essence based on dungeon level and achievements
+        const baseEssence = Math.floor(this.state.dungeon.level / 2);
+        const achievementBonus = Object.keys(this.state.achievements.unlocked).length;
+        return baseEssence + achievementBonus;
+    }
+    
+    prestige() {
+        if (!this.canPrestige()) {
+            this.logMessage('Reach dungeon level 10 to prestige!');
+            return;
+        }
+        
+        const essence = this.calculatePrestigeReward();
+        this.state.prestige.currency += essence;
+        this.state.prestige.level++;
+        this.state.achievements.stats.totalPrestiges++;
+        
+        this.logMessage(`⭐ PRESTIGE! Gained ${essence} essence. Starting fresh with permanent bonuses!`);
+        
+        // Store prestige data
+        const prestigeData = {
+            level: this.state.prestige.level,
+            currency: this.state.prestige.currency,
+            bonuses: { ...this.state.prestige.bonuses },
+            achievements: { ...this.state.achievements }
+        };
+        
+        // Reset game state but keep prestige
+        this.state = new GameState();
+        this.state.prestige = prestigeData.level > 0 ? prestigeData : this.state.prestige;
+        this.state.achievements = prestigeData.achievements;
+        
+        // Apply starting resource bonuses
+        this.applyPrestigeBonuses();
+        this.checkAchievements();
+    }
+    
+    purchasePrestigeBonus(bonusType) {
+        const bonus = PRESTIGE_BONUSES[bonusType];
+        if (!bonus) return;
+        
+        if (this.state.prestige.currency >= bonus.cost) {
+            this.state.prestige.currency -= bonus.cost;
+            this.state.prestige.bonuses[bonusType]++;
+            this.applyPrestigeBonuses();
+            this.logMessage(`Purchased ${bonus.name}!`);
+        }
+    }
+    
+    applyPrestigeBonuses() {
+        const bonuses = this.state.prestige.bonuses;
+        
+        // Apply starting resources bonus
+        if (bonuses.starting_resources > 0) {
+            const multiplier = 1 + (bonuses.starting_resources * 0.5);
+            this.state.resourceManager.set('biomass', Math.floor(10 * multiplier));
+            this.state.resourceManager.set('mana', Math.floor(5 * multiplier));
+            this.state.resourceManager.set('nutrients', Math.floor(3 * multiplier));
+        }
+        
+        // Apply dungeon resilience
+        if (bonuses.dungeon_resilience > 0) {
+            const multiplier = 1 + (bonuses.dungeon_resilience * 0.2);
+            this.state.dungeon.maxHealth = Math.floor(100 * multiplier);
+            this.state.dungeon.health = this.state.dungeon.maxHealth;
+        }
+    }
+    
+    // ===== ACHIEVEMENT SYSTEM =====
+    checkAchievements() {
+        const stats = this.state.achievements.stats;
+        
+        // First Evolution
+        if (stats.totalEvolutions >= 1 && !this.state.achievements.unlocked.first_evolution) {
+            this.unlockAchievement('first_evolution');
+        }
+        
+        // Monster Collector
+        if (this.state.monsters.length >= 10 && !this.state.achievements.unlocked.monster_collector) {
+            this.unlockAchievement('monster_collector');
+        }
+        
+        // Evolution Master
+        if (stats.uniqueMonsterTypes.size >= 10 && !this.state.achievements.unlocked.evolution_master) {
+            this.unlockAchievement('evolution_master');
+        }
+        
+        // Hero Slayer
+        if (stats.heroesDefeated >= 10 && !this.state.achievements.unlocked.slayer) {
+            this.unlockAchievement('slayer');
+        }
+        
+        // Boss Killer
+        if (stats.bossesDefeated >= 1 && !this.state.achievements.unlocked.boss_killer) {
+            this.unlockAchievement('boss_killer');
+        }
+        
+        // Prestige Initiate
+        if (stats.totalPrestiges >= 1 && !this.state.achievements.unlocked.prestige_initiate) {
+            this.unlockAchievement('prestige_initiate');
+        }
+        
+        // Survivor
+        if (stats.invasionsSurvived >= 100 && !this.state.achievements.unlocked.survivor) {
+            this.unlockAchievement('survivor');
+        }
+        
+        // Ecosystem Master
+        const unlockedHabitats = Object.values(this.state.habitats).filter(h => h.unlocked).length;
+        if (unlockedHabitats >= 6 && !this.state.achievements.unlocked.ecosystem_master) {
+            this.unlockAchievement('ecosystem_master');
+        }
+        
+        // Resource Baron
+        const resources = this.state.resourceManager.getAll();
+        if (resources.biomass >= 1000 && resources.mana >= 1000 && resources.nutrients >= 1000 && !this.state.achievements.unlocked.resource_baron) {
+            this.unlockAchievement('resource_baron');
+        }
+    }
+    
+    unlockAchievement(achievementId) {
+        const achievement = ACHIEVEMENTS[achievementId];
+        if (!achievement) return;
+        
+        this.state.achievements.unlocked[achievementId] = true;
+        this.state.prestige.currency += achievement.reward;
+        
+        this.logMessage(`🏆 ACHIEVEMENT UNLOCKED: ${achievement.name} - +${achievement.reward} Essence!`);
+        this.showAchievementNotification(achievement);
+    }
+    
+    showAchievementNotification(achievement) {
+        // Create a floating notification
+        const notification = document.createElement('div');
+        notification.className = 'achievement-notification';
+        notification.innerHTML = `
+            <div class="achievement-icon">${achievement.icon}</div>
+            <div class="achievement-info">
+                <div class="achievement-name">${achievement.name}</div>
+                <div class="achievement-desc">${achievement.description}</div>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => notification.classList.add('show'), 100);
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => notification.remove(), 500);
+        }, 3000);
+    }
+    
+    // ===== BOSS SYSTEM =====
+    spawnBoss() {
+        const bossTypes = DataTemplates.getBossTypes();
+        const boss = bossTypes[Math.floor(Math.random() * bossTypes.length)];
+        
+        const hero = {
+            id: Date.now(),
+            name: boss.name,
+            health: boss.health,
+            maxHealth: boss.health,
+            attack: boss.attack,
+            loot: { ...boss.loot },
+            special: boss.special,
+            isBoss: true,
+            equipmentDrop: boss.equipmentDrop
+        };
+        
+        this.state.heroes.push(hero);
+        this.logMessage(`⚠️ BOSS INVASION: ${hero.name} has entered your dungeon!`);
+        
+        setTimeout(() => this.resolveCombat(hero), 2000);
+    }
+    
+    // ===== EQUIPMENT/LOOT SYSTEM =====
+    dropLoot(hero) {
+        if (!hero.equipmentDrop) return;
+        
+        const equipmentTypes = DataTemplates.getEquipmentTypes();
+        const rarityRoll = Math.random();
+        
+        let rarity;
+        if (rarityRoll < 0.05) rarity = 'epic';
+        else if (rarityRoll < 0.20) rarity = 'rare';
+        else rarity = 'common';
+        
+        const slots = Object.keys(equipmentTypes[rarity]);
+        const randomSlot = slots[Math.floor(Math.random() * slots.length)];
+        const equipment = equipmentTypes[rarity][randomSlot];
+        
+        const loot = {
+            id: Date.now(),
+            slot: randomSlot,
+            ...equipment
+        };
+        
+        this.state.availableLoot.push(loot);
+        this.logMessage(`💎 ${equipment.name} dropped! (${equipment.rarity})`);
+    }
+    
+    equipItem(lootId) {
+        const loot = this.state.availableLoot.find(l => l.id === lootId);
+        if (!loot) return;
+        
+        // Unequip old item if exists
+        if (this.state.equipment[loot.slot]) {
+            this.logMessage(`Replaced ${this.state.equipment[loot.slot].name}`);
+        }
+        
+        this.state.equipment[loot.slot] = loot;
+        this.state.availableLoot = this.state.availableLoot.filter(l => l.id !== lootId);
+        
+        this.logMessage(`⚡ Equipped: ${loot.name}`);
+        this.applyEquipmentBonuses();
+    }
+    
+    applyEquipmentBonuses() {
+        // Equipment bonuses are applied dynamically during calculations
+        // This method is here for potential future use
+    }
+    
+    getEquipmentBonus(type) {
+        let bonus = 1.0;
+        Object.values(this.state.equipment).forEach(item => {
+            if (item && item.bonus[type]) {
+                bonus *= item.bonus[type];
+            }
+        });
+        return bonus;
+    }
+    
+    // ===== UI UPDATE METHODS =====
+    updatePrestigeDisplay() {
+        const prestigePanel = document.getElementById('prestige-panel');
+        if (!prestigePanel) return;
+        
+        const canPrestige = this.canPrestige();
+        const reward = canPrestige ? this.calculatePrestigeReward() : 0;
+        
+        let html = `
+            <div class="prestige-header">
+                <h3>Level ${this.state.prestige.level}</h3>
+                <div style="color: #ffd700; font-size: 1.1em;">⭐ ${this.state.prestige.currency} Essence</div>
+            </div>
+            <button class="prestige-btn" onclick="game.prestige()" ${canPrestige ? '' : 'disabled'}>
+                ${canPrestige ? `Prestige! (+${reward} ⭐)` : `Level ${GAME_CONFIG.PRESTIGE_UNLOCK_LEVEL} Required`}
+            </button>
+            <div class="prestige-bonuses">
+                <h4>Permanent Upgrades:</h4>
+        `;
+        
+        Object.keys(PRESTIGE_BONUSES).forEach(bonusKey => {
+            const bonus = PRESTIGE_BONUSES[bonusKey];
+            const currentLevel = this.state.prestige.bonuses[bonusKey] || 0;
+            const canAfford = this.state.prestige.currency >= bonus.cost;
+            
+            html += `
+                <div class="prestige-bonus ${canAfford ? 'affordable' : 'locked'}">
+                    <div class="bonus-name">${bonus.name} ${currentLevel > 0 ? `(Lv ${currentLevel})` : ''}</div>
+                    <div class="bonus-desc">${bonus.description}</div>
+                    <button class="buy-bonus-btn" onclick="game.purchasePrestigeBonus('${bonusKey}')" 
+                            ${canAfford ? '' : 'disabled'}>
+                        ${bonus.cost} ⭐
+                    </button>
+                </div>
+            `;
+        });
+        
+        html += `</div>`;
+        prestigePanel.innerHTML = html;
+    }
+    
+    updateAchievementDisplay() {
+        const achievementPanel = document.getElementById('achievement-panel');
+        if (!achievementPanel) return;
+        
+        let html = '<div class="achievement-grid">';
+        
+        Object.keys(ACHIEVEMENTS).forEach(achKey => {
+            const ach = ACHIEVEMENTS[achKey];
+            const unlocked = this.state.achievements.unlocked[achKey];
+            
+            html += `
+                <div class="achievement ${unlocked ? 'unlocked' : 'locked'}">
+                    <div class="ach-icon">${unlocked ? ach.icon : '🔒'}</div>
+                    <div class="ach-name">${ach.name}</div>
+                    <div class="ach-desc">${ach.description}</div>
+                    <div class="ach-reward">+${ach.reward} Essence</div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        achievementPanel.innerHTML = html;
+    }
+    
+    updateEquipmentDisplay() {
+        const equipmentPanel = document.getElementById('equipment-panel');
+        if (!equipmentPanel) return;
+        
+        let html = '<div class="equipment-header"><h3>⚡ Equipment</h3></div><div class="equipment-slots">';
+        
+        const slotNames = {
+            core_crystal: 'Core Crystal',
+            mana_conduit: 'Mana Conduit',
+            bio_reactor: 'Bio Reactor',
+            nutrient_filter: 'Nutrient Filter'
+        };
+        
+        Object.keys(slotNames).forEach(slot => {
+            const item = this.state.equipment[slot];
+            html += `
+                <div class="equipment-slot ${item ? 'filled' : 'empty'}">
+                    <div class="slot-name">${slotNames[slot]}</div>
+                    ${item ? `
+                        <div class="item-name ${item.rarity}">${item.name}</div>
+                        <div class="item-bonus">+${Math.round((Object.values(item.bonus)[0] - 1) * 100)}% ${Object.keys(item.bonus)[0].replace('_', ' ')}</div>
+                    ` : '<div class="empty-text">Empty</div>'}
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        
+        if (this.state.availableLoot.length > 0) {
+            html += '<div class="loot-panel"><h4>💎 Available Loot:</h4>';
+            this.state.availableLoot.forEach(loot => {
+                html += `
+                    <div class="loot-item ${loot.rarity}">
+                        <div class="loot-name">${loot.name}</div>
+                        <div class="loot-bonus">+${Math.round((Object.values(loot.bonus)[0] - 1) * 100)}% ${Object.keys(loot.bonus)[0].replace('_', ' ')}</div>
+                        <button onclick="game.equipItem(${loot.id})">Equip</button>
+                    </div>
+                `;
+            });
+            html += '</div>';
+        }
+        
+        equipmentPanel.innerHTML = html;
     }
 }
 

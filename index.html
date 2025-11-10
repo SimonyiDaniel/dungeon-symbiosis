@@ -29,8 +29,18 @@
                     <span class="label">Time:</span>
                     <span id="game-time">0</span>s
                 </div>
+                <div class="stat">
+                    <button id="open-achievements" class="achievement-btn">🏆 Achievements</button>
+                </div>
             </div>
         </header>
+
+        <aside class="prestige-sidebar">
+            <h2>🌟 Prestige</h2>
+            <div id="prestige-panel" class="prestige-panel">
+                <!-- Prestige options will be populated by JavaScript -->
+            </div>
+        </aside>
 
         <main>
             <section class="resources">
@@ -87,10 +97,31 @@
                     <!-- Evolution options will be added dynamically -->
                 </div>
             </section>
+
+            <section class="equipment-section">
+                <h2>Equipment & Loot</h2>
+                <div id="equipment-panel" class="equipment-panel">
+                    <!-- Equipment will be populated by JavaScript -->
+                </div>
+            </section>
         </main>
 
         <!-- Add toast container for short action feedbacks -->
         <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+        <!-- Achievement Modal -->
+        <div id="achievement-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>🏆 Achievements</h2>
+                    <button class="close-modal" id="close-achievements">&times;</button>
+                </div>
+                <div id="achievement-panel" class="achievement-panel">
+                    <!-- Achievements will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script src="game.js"></script>
